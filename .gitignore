@@ -127,3 +127,18 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Data
+config/*
+!config/.gitkeep
+data/*
+!data/.gitkeep
+log/*
+!log/.gitkeep
+model/*
+!model/.gitkeep
+notebooks/log*
+!notebooks/.gitkeep
+results/log*
+!results/.gitkeep
+catboost_info/*
