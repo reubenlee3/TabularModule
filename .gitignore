@@ -142,3 +142,5 @@ notebooks/log*
 results/log*
 !results/.gitkeep
 catboost_info/*
+*.csv
+*.pkl
