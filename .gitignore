@@ -143,4 +143,6 @@ results/log*
 !results/.gitkeep
 catboost_info/*
 *.csv
+*.html
 *.pkl
+!tabular_src/test/testdata/adult.csv

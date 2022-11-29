@@ -71,7 +71,7 @@ dash-core-components==2.0.0
 dash-cytoscape==0.3.0
 dash-html-components==2.0.0
 dash-table==5.0.0
-# dask==2022.11.1
+#dask==2022.11.1
 databricks-cli==0.17.3
 dataclasses==0.6
 debugpy==1.6.3
@@ -80,7 +80,7 @@ defusedxml==0.7.1
 Deprecated==1.2.13
 dill==0.3.6
 distlib==0.3.6
-# distributed==2022.11.1
+#distributed==2022.11.1
 docker==6.0.1
 dtreeviz==1.4.0
 dulwich==0.20.50
@@ -175,8 +175,8 @@ jupyterlab-pygments==0.2.2
 jupyterlab-widgets==3.0.3
 jupyterlab_server==2.16.3
 kaleido==0.2.1
-kedro==0.18.3
-kedro-viz==5.1.1
+#kedro==0.18.3
+#kedro-viz==5.1.1
 keyring==23.11.0
 kiwisolver==1.4.4
 kmodes==0.12.2
