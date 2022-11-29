@@ -144,3 +144,4 @@ results/log*
 catboost_info/*
 *.csv
 *.pkl
+!test/testdata/adult.csv
