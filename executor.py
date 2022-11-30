@@ -1,7 +1,7 @@
 import os.path
 
 import hydra
-from tabular_src import DataLoader, data_drift_report
+from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
 from tabular_src import get_logger
 
 logger = get_logger(__name__)
@@ -24,8 +24,24 @@ def execute_main(cfg) -> None:
                                  test_ratio=cfg.process.test_ratio, seed=cfg.process.seed,
                                  target_label=cfg.columns.target_label)
         train_df, test_df, categorical_cols, numerical_cols, target_label = data_loader.return_values()
+        if cfg.data_validation.data_integrity:
+            data_integrity = DataIntegrityTest(df=train_df, categorical_columns=categorical_cols,
+                                               numerical_columns=numerical_cols, datetime_columns=None,
+                                               target_label=target_label, task=cfg.process.task,
+                                               seed=cfg.process.seed
+                                               )
+            data_integrity.run_integrity_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
+            # TODO: Action upon data integrity report
+
         if cfg.data_validation.data_drift:
-            data_drift_report(training_data=train_df, test_data=test_df, save_dir=output_folder)
+            data_drift_report = TrainingDataDrift(train_df=train_df, test_df=test_df,
+                                                  categorical_columns=categorical_cols,
+                                                  numerical_columns=numerical_cols, datetime_columns=None,
+                                                  target_label=target_label, task=cfg.process.task,
+                                                  seed=cfg.process.seed)
+            data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
+            data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
+            # TODO: Action upon data data drift report
 
     else:
         logger.info('Running Prediction mode')
