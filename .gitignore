@@ -129,6 +129,7 @@ dmypy.json
 .pyre/
 
 # Data
+.idea/*
 config/*
 !config/.gitkeep
 data/*
@@ -139,10 +140,11 @@ model/*
 !model/.gitkeep
 notebooks/log*
 !notebooks/.gitkeep
-results/log*
+results/*
 !results/.gitkeep
 catboost_info/*
 *.csv
 *.html
+*json
 *.pkl
 !tabular_src/test/testdata/adult.csv

@@ -1,2 +1,2 @@
-from .data import DataLoader, data_drift_report
+from .data import DataIntegrityTest, DataLoader, TrainingDataDrift, data_drift_report
 from .utils import get_logger
