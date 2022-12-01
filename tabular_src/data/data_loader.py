@@ -1,14 +1,10 @@
+from typing import Union
 from pathlib import Path
 import pandas as pd
-import os
-import time
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit, train_test_split
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
-from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedShuffleSplit
 
+from ..feature import FeatureSelection
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -16,8 +12,12 @@ logger = get_logger(__name__)
 
 class DataLoader(object):
     def __init__(self, train: (str, pd.DataFrame) = None, test: (str, pd.DataFrame) = None,
-                 is_reduce_memory: bool = False, infer_datatype: bool = False, categorical_columns: list = None,
-                 test_ratio: float = None, target_label: str = None, seed: int = None):
+                 is_reduce_memory: bool = False, infer_datatype: bool = False,
+                 categorical_columns: Union[list, str] = None, test_ratio: float = None,
+                 target_label: str = None, run_feature_selection: bool = False, rfe_estimator: str = None,
+                 task: str = None, n_features: Union[int, float] = None,
+                 multi_colinear_threshold: float = None, keep_features: Union[list, str] = None,
+                 text_features: Union[list, str] = None, seed: int = None):
         """"""
         if isinstance(train, str):
             # Read dataframe from csv path
@@ -52,6 +52,18 @@ class DataLoader(object):
         else:
             logger.info('Inferring column types automatically')
             self.get_col_types(auto=True, categorical_columns=None)
+        if not run_feature_selection:
+            logger.info('Auto feature selection not selected')
+            self.important_columns = None
+        else:
+            feature_selection = FeatureSelection(train_df=self.train_df, rfe_estimator=rfe_estimator, task=task,
+                                                 target=target_label, n_features=n_features,
+                                                 keep_features=keep_features, num_features=self.numerical_cols,
+                                                 text_features=text_features, cat_features=self.categorical_cols,
+                                                 multi_colinear_threshold=multi_colinear_threshold, seed=self.seed)
+            self.important_columns = feature_selection.run_feature_selection()
+        if self.important_columns is not None:
+            self.train_df = self.train_df[self.important_columns]
         self.train_test_split(test_ratio=test_ratio)
         logger.info('train shape: {}, test shape: {}'.format(self.train_df.shape, self.test_df.shape))
 
@@ -104,6 +116,11 @@ class DataLoader(object):
 
     def return_values(self):
         """"""
+        # update categorical and numerical feature list
+        if self.important_columns is not None:
+            logger.info('Updating categorical and numerical cols after feature selection')
+            self.categorical_cols = list(set(self.important_columns).intersection(self.categorical_cols))
+            self.numerical_cols = list(set(self.important_columns).intersection(self.numerical_cols))
         return self.train_df, self.test_df, self.categorical_cols, self.numerical_cols, self.target
 
 
@@ -136,18 +153,3 @@ def reduce_mem_usage(df: pd.DataFrame, verbose=True):
         logger.info('Memory usage after optimization is: {:.2f} MB'.format(end_mem))
         logger.info('Decreased by {:.1f}%'.format(100 * (start_mem - end_mem) / start_mem))
     return df
-
-
-def data_drift_report(training_data: pd.DataFrame = None, test_data: pd.DataFrame = None,
-                      save_dir: str = None):
-    """"""
-    logger.info('Calculating Data drift between training and testing dataframes')
-    t0 = time.time()
-    drift_report = Report(metrics=[DataDriftPreset(),
-                                        ])
-    drift_report.run(current_data=test_data, reference_data=training_data)
-    file_path = os.path.join(save_dir, 'data_drift_report.html')
-    drift_report.save_html(file_path)
-    t1 = time.time()
-    logger.info('time taken to generate drift is {:.2f} secs'.format(t1-t0))
-    logger.info('Saved Data drift file in {}'.format(file_path))

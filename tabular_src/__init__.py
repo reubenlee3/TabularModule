@@ -1,2 +1,3 @@
-from .data import DataIntegrityTest, DataLoader, TrainingDataDrift, data_drift_report
+from .data import DataIntegrityTest, TrainingDataDrift, DataLoader
+from .feature import FeatureSelection
 from .utils import get_logger

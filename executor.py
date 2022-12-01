@@ -21,8 +21,12 @@ def execute_main(cfg) -> None:
         data_loader = DataLoader(train=cfg.paths.train, test=cfg.paths.test, is_reduce_memory=cfg.process.memory_reduce,
                                  infer_datatype=cfg.process.infer_datatype,
                                  categorical_columns=cfg.columns.categorical_columns,
-                                 test_ratio=cfg.process.test_ratio, seed=cfg.process.seed,
-                                 target_label=cfg.columns.target_label)
+                                 test_ratio=cfg.process.test_ratio, target_label=cfg.columns.target_label,
+                                 run_feature_selection=cfg.feature_selection.auto,
+                                 rfe_estimator=cfg.feature_selection.estimator, task=cfg.process.task,
+                                 multi_colinear_threshold=cfg.feature_selection.multi_colinear_threshold,
+                                 n_features=cfg.feature_selection.n_features, keep_features=cfg.columns.keep_columns,
+                                 text_features=cfg.columns.text_columns, seed=cfg.process.seed)
         train_df, test_df, categorical_cols, numerical_cols, target_label = data_loader.return_values()
         if cfg.data_validation.data_integrity:
             data_integrity = DataIntegrityTest(df=train_df, categorical_columns=categorical_cols,
