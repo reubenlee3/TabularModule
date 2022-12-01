@@ -145,6 +145,6 @@ results/*
 catboost_info/*
 *.csv
 *.html
-*json
+*.json
 *.pkl
 !tabular_src/test/testdata/adult.csv

@@ -53,7 +53,7 @@ class DataIntegrityTest(object):
         # test_results = data_integrity_dataset_tests.as_dict()
         # self.df = self.act_testresults(test_results=test_results)
         t1 = time.time()
-        logger.info('time taken to generate drift is {:.2f} secs'.format(t1 - t0))
+        logger.info('time taken to generate data-integrity report is {:.2f} secs'.format(t1 - t0))
 
     def act_testresults(self, test_results: dict = None) -> pd.DataFrame:
         """"""
@@ -101,7 +101,7 @@ class TrainingDataDrift(object):
         # test_results = data_integrity_dataset_tests.as_dict()
         # self.df = self.act_testresults(test_results=test_results)
         t1 = time.time()
-        logger.info('time taken to generate drift is {:.2f} secs'.format(t1 - t0))
+        logger.info('time taken to generate data-drift is {:.2f} secs'.format(t1 - t0))
         # return self.df
 
     def run_target_drift_checks(self, save_html: bool = False, save_dir: str = None):
@@ -126,7 +126,7 @@ class TrainingDataDrift(object):
         # test_results = data_integrity_dataset_tests.as_dict()
         # self.df = self.act_testresults(test_results=test_results)
         t1 = time.time()
-        logger.info('time taken to generate drift is {:.2f} secs'.format(t1 - t0))
+        logger.info('time taken to generate target-drift is {:.2f} secs'.format(t1 - t0))
 
     # def data_drift_report(training_data: pd.DataFrame = None, test_data: pd.DataFrame = None,
     #                       save_dir: str = None):
