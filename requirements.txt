@@ -94,6 +94,7 @@ explainerdashboard==0.4.0
 fairlearn==0.8.0
 fastapi==0.66.1
 fastjsonschema==2.16.2
+fastparquet==0.8.3
 featuretools==1.18.0
 ffmpy==0.3.0
 filelock==3.8.0
@@ -359,7 +360,7 @@ tomli==2.0.1
 tomlkit==0.11.6
 toolz==0.12.0
 toposort==1.7
-tornado==6.2
+tornado==6.1
 tqdm==4.64.1
 trace-updater==0.0.9
 traitlets==5.5.0
