@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 def execute_main(cfg) -> None:
     """"""
     # Set-up parameters
-    output_folder = os.path.join(cfg.paths.output, 'blend')
+    output_folder = os.path.join(cfg.paths.output, 'test')
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         logger.info('Storing results at {}'.format(output_folder))
@@ -64,7 +64,7 @@ def execute_main(cfg) -> None:
                           ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
 
         if cfg.model.feature_importance:
-            pycaret_model.feature_importance(path=output_folder)
+            pycaret_model.feature_explanation(path=output_folder)
 
         if cfg.model.fairness:
             pycaret_model.check_fairness()

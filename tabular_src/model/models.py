@@ -56,8 +56,9 @@ class PyCaretModel(TabularModels):
         self.estimator = estimator_list
         self.params = params
         self.n_jobs = n_jobs
-        self.model_list = []
         self.model = None
+        self.tuned_model = None
+        self.calibrated_model = None
         self.model_pipeline = None
         self.gpu = use_gpu
         if self.gpu:
@@ -77,14 +78,14 @@ class PyCaretModel(TabularModels):
 
     def fit(self, apply_pca: bool = False, remove_outliers: bool = False, fold_strategy: str = 'stratifiedkfold',
             cv_fold_size: int = 4, calibrate: bool = False, probability_threshold: float = 0.5,
-            optimize: bool = False, custom_grid: dict = None, n_iter: int = None, search_library: str = None,
+            optimize: bool = False, custom_grid: dict = None, n_iter: int = 20, search_library: str = None,
             search_algorithm: str = None, search_metric: str = None, early_stopping: bool = False,
             early_stopping_max_iters: int = None, ensemble_model: bool = False, ensemble_type: str = None):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import setup, set_config, create_model, tune_model, models, \
                 blend_models, stack_models, calibrate_model, finalize_model, compare_models
-            # Set up classifer
+            # Set up classifier
             classifier = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
                                remove_multicollinearity=True, multicollinearity_threshold=0.6,
                                pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
@@ -96,9 +97,20 @@ class PyCaretModel(TabularModels):
             # create model
             if len(self.estimator) == 1:
                 logger.info('Only one {} estimator is passed for modelling'.format(self.estimator[0]))
-                self.model = create_model(estimator=self.estimator[0], fold=cv_fold_size, n_iter=n_iter, round=2,
+                self.model = create_model(estimator=self.estimator[0], fold=cv_fold_size, round=2,
                                           cross_validation=True, probability_threshold=probability_threshold,
                                           verbose=self.verbose)
+                if not optimize:
+                    self.tuned_model = self.model
+                else:
+                    self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
+                                                                   n_iter=n_iter, custom_grid=custom_grid,
+                                                                   search_metric=search_metric,
+                                                                   search_library=search_library,
+                                                                   search_algorithm=search_algorithm,
+                                                                   early_stopping=early_stopping,
+                                                                   early_stopping_max_iters=early_stopping_max_iters,
+                                                                   )
             else:
                 logger.info('There are {} algorithms passed for modelling'.format(len(self.estimator)))
                 # validate estimator list
@@ -111,56 +123,69 @@ class PyCaretModel(TabularModels):
                                                 errors='ignore', probability_threshold=probability_threshold,
                                                 verbose=self.verbose
                                                 )
+                    if not optimize:
+                        self.tuned_model = self.model
+                    else:
+                        self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
+                                                                       n_iter=n_iter, custom_grid=custom_grid,
+                                                                       search_metric=search_metric,
+                                                                       search_library=search_library,
+                                                                       search_algorithm=search_algorithm,
+                                                                       early_stopping=early_stopping,
+                                                                       early_stopping_max_iters=early_stopping_max_iters,
+                                                                       )
+
                     logger.info('The best model is {}'.format(type(self.model)))
                 else:
                     logger.info('Selected ensemble model and ensemble type is {}'.format(ensemble_type))
                     logger.info('Model ensemble is selected')
                     try:
-                        all_models = compare_models(include=self.estimator, fold=cv_fold_size, round=2,
-                                                    cross_validation=True, sort=search_metric,
-                                                    n_select=len(self.estimator), errors='ignore',
-                                                    probability_threshold=probability_threshold,
-                                                    verbose=self.verbose
-                                                    )
+                        model_list = []
+                        for estimator in self.estimator:
+                            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                                 cross_validation=True, probability_threshold=probability_threshold,
+                                                 verbose=self.verbose
+                                                 )
+                            if not optimize:
+                                tuned_model = model
+                            else:
+                                tuned_model, tuner = self._optimize_model(model=model, cv_fold_size=cv_fold_size,
+                                                                          n_iter=n_iter, custom_grid=custom_grid,
+                                                                          search_metric=search_metric,
+                                                                          search_library=search_library,
+                                                                          search_algorithm=search_algorithm,
+                                                                          early_stopping=early_stopping,
+                                                                          early_stopping_max_iters=early_stopping_max_iters,
+                                                                          )
+                            model_list.append(tuned_model)
+                        import pdb; pdb.set_trace()
                         if ensemble_type == 'stack':
                             logger.info('Model stacking is selected')
-                            self.model = stack_models(estimator_list=all_models, meta_model=None,
+                            self.model = stack_models(estimator_list=model_list, meta_model=None,
                                                       fold=cv_fold_size, round=2, optimize=search_metric,
                                                       method='auto', restack=False, verbose=self.verbose,
                                                       probability_threshold=probability_threshold,
                                                       choose_better=False)
                         elif ensemble_type == 'blend':
                             logger.info('Blending ML model')
-                            self.model = blend_models(estimator_list=all_models, fold=cv_fold_size,
+                            self.model = blend_models(estimator_list=model_list, fold=cv_fold_size,
                                                       round=2, optimize=search_metric, method='auto',
                                                       verbose=self.verbose, probability_threshold=probability_threshold,
                                                       choose_better=False)
                     except AssertionError as error:
                         logger.info('The issue in stacking the model is {}'.format(error))
-            # tune model
-            if optimize:
-                logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
-                                                                                                 search_metric))
-                # from pycaret.distributions import UniformDistribution, IntUniformDistribution
-                # custom_grid = {
-                #     "max_depth": IntUniformDistribution(4, 6, 1),
-                #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
-                # }
-                self.model, tuner = tune_model(estimator=self.model, fold=cv_fold_size, n_iter=n_iter, round=2,
-                                               custom_grid=custom_grid, optimize=search_metric,
-                                               search_library=search_library, search_algorithm=search_algorithm,
-                                               early_stopping=early_stopping, verbose=self.verbose,
-                                               early_stopping_max_iters=early_stopping_max_iters,
-                                               choose_better=True, return_tuner=True)
-            
+
             # calibrate model
-            if calibrate:
+            if not calibrate:
+                self.calibrated_model = self.tuned_model
+            else:
                 logger.info('Model calibration is selected')
-                self.model = calibrate_model(self.model, calibrate_fold=cv_fold_size, fold=cv_fold_size,
-                                             round=2, method='sigmoid', verbose=self.verbose)
+                self.calibrated_model = calibrate_model(self.tuned_model, calibrate_fold=cv_fold_size,
+                                                        fold=cv_fold_size, round=2, method='sigmoid',
+                                                        verbose=self.verbose)
 
             # finalise model and train on holdout set
-            self.model_pipeline = finalize_model(self.model, model_only=False)
+            self.model_pipeline = finalize_model(self.calibrated_model, model_only=False)
         else:
             from pycaret.regression import setup, set_config
             regressor = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
@@ -175,11 +200,49 @@ class PyCaretModel(TabularModels):
         logger.info('Training completed for PyCaret model')
         # TODO: Implement for regression
 
+    def _optimize_model(self, model, cv_fold_size: int = 4, n_iter: int = 20, custom_grid: dict = None,
+                        search_metric: str = None, early_stopping: bool = False, search_library: str = None,
+                        search_algorithm: str = None, early_stopping_max_iters: int = None, ):
+        """"""
+        # TODO: Optimise grid based on the estimator
+        # tune model
+        if not self.task == 'regression':
+            from pycaret.classification import tune_model
+            logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
+                                                                                             search_metric))
+            # from pycaret.distributions import UniformDistribution, IntUniformDistribution
+            # custom_grid = {
+            #     "max_depth": IntUniformDistribution(4, 6, 1),
+            #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
+            # }
+            model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
+                                      custom_grid=custom_grid, optimize=search_metric,
+                                      search_library=search_library, search_algorithm=search_algorithm,
+                                      early_stopping=early_stopping, verbose=self.verbose,
+                                      early_stopping_max_iters=early_stopping_max_iters,
+                                      choose_better=True, return_tuner=True)
+        else:
+            from pycaret.regression import tune_model
+            logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
+                                                                                             search_metric))
+            # from pycaret.distributions import UniformDistribution, IntUniformDistribution
+            # custom_grid = {
+            #     "max_depth": IntUniformDistribution(4, 6, 1),
+            #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
+            # }
+            model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
+                                      custom_grid=custom_grid, optimize=search_metric,
+                                      search_library=search_library, search_algorithm=search_algorithm,
+                                      early_stopping=early_stopping, verbose=self.verbose,
+                                      early_stopping_max_iters=early_stopping_max_iters,
+                                      choose_better=True, return_tuner=True)
+        return model, tuner
+
     def model_evaluation(self):
         """"""
         pass
 
-    def feature_importance(self, path: str = None):
+    def feature_explanation(self, path: str = None):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import interpret_model
