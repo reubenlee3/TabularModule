@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 def execute_main(cfg) -> None:
     """"""
     # Set-up parameters
-    output_folder = os.path.join(cfg.paths.output, 'test')
+    output_folder = os.path.join(cfg.paths.output, cfg.process.exp_id)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         logger.info('Storing results at {}'.format(output_folder))
@@ -62,6 +62,8 @@ def execute_main(cfg) -> None:
                           n_iter=cfg.model.iteration, search_library='optuna', search_algorithm='tpe',
                           search_metric='F1', early_stopping=True, early_stopping_max_iters=4,
                           ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
+
+        pycaret_model.model_evaluation(path=output_folder, plot=True)
 
         if cfg.model.feature_importance:
             pycaret_model.feature_explanation(path=output_folder)

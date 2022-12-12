@@ -4,12 +4,16 @@ import os
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from category_encoders.count import CountEncoder
+
+from .evaluation import EvaluateClassification
 from ..utils import get_logger
 
 logger = get_logger(__name__)
 
 
 class TabularModels(object):
+    """"""
     def __init__(self, train: pd.DataFrame = None, test: pd.DataFrame = None,
                  task: str = None, target: str = None, is_multilabel: bool = False):
         self.is_train = False
@@ -20,6 +24,7 @@ class TabularModels(object):
         self._check_data(train, test, target)
 
     def _check_data(self, train: pd.DataFrame = None, test: pd.DataFrame = None, target: str = None):
+        """"""
         dataset = [train, test]
         for data in dataset:
             if data is not None:
@@ -44,6 +49,7 @@ class TabularModels(object):
 
 
 class PyCaretModel(TabularModels):
+    """"""
     def __init__(self, train: pd.DataFrame = None, target: str = None, task: str = None, test: pd.DataFrame = None,
                  estimator_list: list = None, params: dict = None, n_jobs: int = -1, use_gpu: bool = False,
                  is_multilabel=False, categorical_cols: Union[list, str] = None,
@@ -61,6 +67,7 @@ class PyCaretModel(TabularModels):
         self.calibrated_model = None
         self.model_pipeline = None
         self.gpu = use_gpu
+        # TODO: Hard-coded gpu to be false
         if self.gpu:
             logger.info('Checking for GPU installation')
             gpu = False
@@ -86,14 +93,14 @@ class PyCaretModel(TabularModels):
             from pycaret.classification import setup, set_config, create_model, tune_model, models, \
                 blend_models, stack_models, calibrate_model, finalize_model, compare_models
             # Set up classifier
+            set_config('seed', self.seed)
             classifier = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
                                remove_multicollinearity=True, multicollinearity_threshold=0.6,
                                pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
                                fold=cv_fold_size, keep_features=self.keep_features, numeric_features=self.num_cols,
                                categorical_features=self.cat_cols, text_features=self.text_cols,
-                               max_encoding_ohe=2, encoding_method=None, verbose=self.verbose,
+                               max_encoding_ohe=40, encoding_method=None, verbose=self.verbose,
                                n_jobs=self.n_jobs, use_gpu=self.gpu)
-            set_config('seed', self.seed)
             # create model
             if len(self.estimator) == 1:
                 logger.info('Only one {} estimator is passed for modelling'.format(self.estimator[0]))
@@ -158,20 +165,21 @@ class PyCaretModel(TabularModels):
                                                                           early_stopping_max_iters=early_stopping_max_iters,
                                                                           )
                             model_list.append(tuned_model)
-                        import pdb; pdb.set_trace()
+
                         if ensemble_type == 'stack':
                             logger.info('Model stacking is selected')
-                            self.model = stack_models(estimator_list=model_list, meta_model=None,
-                                                      fold=cv_fold_size, round=2, optimize=search_metric,
-                                                      method='auto', restack=False, verbose=self.verbose,
-                                                      probability_threshold=probability_threshold,
-                                                      choose_better=False)
+                            self.tuned_model = stack_models(estimator_list=model_list, meta_model=None,
+                                                            fold=cv_fold_size, round=2, optimize=search_metric,
+                                                            method='auto', restack=False, verbose=self.verbose,
+                                                            probability_threshold=probability_threshold,
+                                                            choose_better=False)
                         elif ensemble_type == 'blend':
                             logger.info('Blending ML model')
-                            self.model = blend_models(estimator_list=model_list, fold=cv_fold_size,
-                                                      round=2, optimize=search_metric, method='auto',
-                                                      verbose=self.verbose, probability_threshold=probability_threshold,
-                                                      choose_better=False)
+                            self.tuned_model = blend_models(estimator_list=model_list, fold=cv_fold_size,
+                                                            round=2, optimize=search_metric, method='auto',
+                                                            verbose=self.verbose,
+                                                            probability_threshold=probability_threshold,
+                                                            choose_better=False)
                     except AssertionError as error:
                         logger.info('The issue in stacking the model is {}'.format(error))
 
@@ -183,7 +191,6 @@ class PyCaretModel(TabularModels):
                 self.calibrated_model = calibrate_model(self.tuned_model, calibrate_fold=cv_fold_size,
                                                         fold=cv_fold_size, round=2, method='sigmoid',
                                                         verbose=self.verbose)
-
             # finalise model and train on holdout set
             self.model_pipeline = finalize_model(self.calibrated_model, model_only=False)
         else:
@@ -222,6 +229,7 @@ class PyCaretModel(TabularModels):
                                       early_stopping_max_iters=early_stopping_max_iters,
                                       choose_better=True, return_tuner=True)
         else:
+            # TODO: Modify for regression
             from pycaret.regression import tune_model
             logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
                                                                                              search_metric))
@@ -238,9 +246,30 @@ class PyCaretModel(TabularModels):
                                       choose_better=True, return_tuner=True)
         return model, tuner
 
-    def model_evaluation(self):
+    def model_evaluation(self, path: str = None, plot: bool = False):
         """"""
-        pass
+        if not self.task == 'regression':
+            from pycaret.classification import predict_model
+            predict_result = predict_model(estimator=self.calibrated_model, data=self.test.drop(columns=[self.target]),
+                                           probability_threshold=0.5, raw_score=True, round=2,
+                                           verbose=self.verbose)['prediction_score_1']
+            evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target],
+                                              pred_proba=predict_result, prob_threshold=0.5,
+                                              multi_label=self.is_multilabel)
+            file_path = os.path.join(path, 'evaluation_report.json')
+            plot_path = os.path.join(path, 'evaluation_plots')
+            if not os.path.exists(plot_path):
+                os.makedirs(plot_path)
+            evaluate.save(filepath=file_path, plot=plot, plot_path=plot_path)
+        else:
+            # TODO: Implement for regression
+            from pycaret.regression import predict_model
+            predict_result = predict_model(estimator=self.calibrated_model, data=self.test.drop(columns=[self.target]),
+                                           round=2, verbose=self.verbose)['prediction_label']
+            evaluate = EvaluateClassification(labels=self.test[self.target], pred_proba=predict_result,
+                                              multi_label=self.is_multilabel)
+            file_path = os.path.join(path, 'classification')
+            evaluate.save(filepath=file_path, plot=True)
 
     def feature_explanation(self, path: str = None):
         """"""
@@ -276,7 +305,8 @@ class PyCaretModel(TabularModels):
         """"""
         pass
 
-    def save(self, path: str = None, model_stats: bool = False, training_data: bool = False):
+    def save(self, path: str = None, model_stats: bool = False,
+             training_data: bool = False, extract_tree: bool = False):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import save_model, pull
@@ -292,6 +322,9 @@ class PyCaretModel(TabularModels):
                 table = pa.Table.from_pandas(df=self.train, preserve_index=True)
                 file_path = os.path.join(path, 'training_data.parquet')
                 pq.write_table(table, file_path)
+            if extract_tree:
+                logger.info('Extracting tree from pycaret model')
+                # TODO: Extract decision tree from the pycaret using API
             logger.info('model is saved in the location : {}'.format(path))
         else:
             from pycaret.classification import save_model, pull
@@ -323,6 +356,7 @@ class PyCaretModel(TabularModels):
             logger.info('Trained pycaret model is loaded from: {}'.format(path))
 
     def predict(self, data: pd.DataFrame = None) -> pd.DataFrame:
+        """"""
         assert isinstance(data, (pd.DataFrame, np.ndarray))
         if not self.task == 'regression':
             from pycaret.classification import predict_model

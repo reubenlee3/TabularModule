@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
-    <content url="file://$MODULE_DIR$" />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/catboost_info/learn" />
+      <excludeFolder url="file://$MODULE_DIR$/catboost_info/tmp" />
+      <excludeFolder url="file://$MODULE_DIR$/results/blend" />
+      <excludeFolder url="file://$MODULE_DIR$/results/catboost" />
+      <excludeFolder url="file://$MODULE_DIR$/results/lightgbm" />
+      <excludeFolder url="file://$MODULE_DIR$/results/stack" />
+      <excludeFolder url="file://$MODULE_DIR$/results/xgboost" />
+    </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (tabular)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
