@@ -93,7 +93,6 @@ class PyCaretModel(TabularModels):
             from pycaret.classification import setup, set_config, create_model, tune_model, models, \
                 blend_models, stack_models, calibrate_model, finalize_model, compare_models
             # Set up classifier
-            set_config('seed', self.seed)
             classifier = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
                                remove_multicollinearity=True, multicollinearity_threshold=0.6,
                                pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
@@ -101,6 +100,7 @@ class PyCaretModel(TabularModels):
                                categorical_features=self.cat_cols, text_features=self.text_cols,
                                max_encoding_ohe=40, encoding_method=None, verbose=self.verbose,
                                n_jobs=self.n_jobs, use_gpu=self.gpu)
+            set_config('seed', self.seed)
             # create model
             if len(self.estimator) == 1:
                 logger.info('Only one {} estimator is passed for modelling'.format(self.estimator[0]))
@@ -273,6 +273,7 @@ class PyCaretModel(TabularModels):
 
     def feature_explanation(self, path: str = None):
         """"""
+        # TODO: Skip feature explanation for ensemble methods
         if not self.task == 'regression':
             from pycaret.classification import interpret_model
             # TODO: Sample Xtrain and Ytrain for larger dataset

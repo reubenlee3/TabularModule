@@ -12,7 +12,7 @@ columns:
   target_label: 'income'
 
 process:
-  exp_id: 'lightgbm'
+  exp_id: 'stack'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
@@ -42,7 +42,7 @@ hydra:
     dir: .
 
 model:
-  algorithm: ['lightgbm']
+  algorithm: ['catboost', 'xgboost', 'lightgbm']
   ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4
