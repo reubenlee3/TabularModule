@@ -12,13 +12,15 @@ columns:
   target_label: 'income'
 
 process:
-  exp_id: 'stack'
+  exp_id: 'surrogate_model'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
   seed: 33
   task: 'classification'
   verbose: False
+  surrogate_model: True
+  only_surrogate: False
 
 feature_selection:
   auto: True
@@ -27,9 +29,9 @@ feature_selection:
   multi_colinear_threshold: 0.6
 
 data_validation:
-  data_drift: True
-  data_integrity: True
-  save_html: True
+  data_drift: False
+  data_integrity: False
+  save_html: False
 
 defaults:
   - _self_
@@ -42,7 +44,8 @@ hydra:
     dir: .
 
 model:
-  algorithm: ['catboost', 'xgboost', 'lightgbm']
+  surrogate_algorithm: 'random_forest'
+  algorithm: ['lightgbm']
   ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4

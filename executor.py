@@ -2,7 +2,7 @@ import os.path
 
 import hydra
 from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
-from tabular_src import PyCaretModel
+from tabular_src import PyCaretModel, SurrogateModel
 from tabular_src import get_logger
 
 logger = get_logger(__name__)
@@ -48,30 +48,45 @@ def execute_main(cfg) -> None:
             data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
             # TODO: Action upon data data drift report
 
-        # Train Model
-        pycaret_model = PyCaretModel(train=train_df, target=target_label, task=cfg.process.task, test=test_df,
-                                     estimator_list=cfg.model.algorithm, params=None, n_jobs=-1, use_gpu=False,
-                                     is_multilabel=False, categorical_cols=categorical_cols,
-                                     numerical_cols=numerical_cols, keep_features=None,
-                                     text_cols=None, seed=cfg.process.seed, verbose=cfg.process.verbose)
+        # build surrogate model
+        if cfg.process.surrogate_model:
+            logger.info('Building surrogate model for debug')
+            surrogate_model = SurrogateModel(train=train_df.drop(columns=target_label, inplace=False),
+                                             target=train_df[target_label],
+                                             task=cfg.process.task, test=test_df,
+                                             estimator=cfg.model.surrogate_algorithm, is_multilabel=False,
+                                             categorical_columns=categorical_cols, numerical_columns=numerical_cols,
+                                             seed=cfg.process.seed)
+            surrogate_model.fit()
+            surrogate_model.save(save_path=output_folder, only_model=True)
 
-        pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy='stratifiedkfold',
-                          cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
-                          probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
-                          # custom_grid=None,
-                          n_iter=cfg.model.iteration, search_library='optuna', search_algorithm='tpe',
-                          search_metric='F1', early_stopping=True, early_stopping_max_iters=4,
-                          ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
+        if not cfg.process.only_surrogate:
+            # Train Model
+            pycaret_model = PyCaretModel(train=train_df, target=target_label, task=cfg.process.task, test=test_df,
+                                         estimator_list=cfg.model.algorithm, params=None, n_jobs=-1, use_gpu=False,
+                                         is_multilabel=False, categorical_cols=categorical_cols,
+                                         numerical_cols=numerical_cols, keep_features=None,
+                                         text_cols=None, seed=cfg.process.seed, verbose=cfg.process.verbose)
 
-        pycaret_model.model_evaluation(path=output_folder, plot=True)
+            pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy='stratifiedkfold',
+                              cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
+                              probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
+                              # custom_grid=None,
+                              n_iter=cfg.model.iteration, search_library='optuna', search_algorithm='tpe',
+                              search_metric='F1', early_stopping=True, early_stopping_max_iters=4,
+                              ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
 
-        if cfg.model.feature_importance:
-            pycaret_model.feature_explanation(path=output_folder)
+            pycaret_model.model_evaluation(path=output_folder, plot=True)
 
-        if cfg.model.fairness:
-            pycaret_model.check_fairness()
+            if cfg.model.feature_importance:
+                pycaret_model.feature_explanation(path=output_folder)
 
-        pycaret_model.save(path=output_folder, training_data=True, model_stats=True)
+            if cfg.model.fairness:
+                pycaret_model.check_fairness()
+
+            pycaret_model.save(path=output_folder, training_data=True, model_stats=True)
+        else:
+            logger.info('only surrogate model training is selected')
     else:
         logger.info('Running Prediction mode')
         data_loader = DataLoader(train=None, test=cfg.paths.test, is_reduce_memory=cfg.process.memory_reduce,
