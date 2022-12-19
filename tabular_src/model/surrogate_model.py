@@ -64,8 +64,6 @@ class SurrogateModel(object):
                                                               max_depth=4, criterion='entropy')),
                     ]
                 )
-                import pdb;
-                pdb.set_trace()
                 self.model_pipeline.fit(X=self.train, y=self.target)
             elif self.estimator == 'decision_tree':
                 logger.info('Selecting Decision tree as surrogate model')
@@ -75,8 +73,6 @@ class SurrogateModel(object):
                         ("classifier", DecisionTreeClassifier(random_state=self.seed, max_depth=4, criterion='gini')),
                     ]
                 )
-                import pdb;
-                pdb.set_trace()
                 self.model_pipeline.fit(X=self.train, y=self.target)
             else:
                 logger.info('estimator {} is not implemented'.format(self.estimator))
@@ -84,6 +80,28 @@ class SurrogateModel(object):
         else:
             # TODO: Set up for regression
             logger.info('setup for regression')
+            if self.estimator == 'random_forest':
+                logger.info('Selecting random forest as surrogate model')
+                self.model_pipeline = Pipeline(
+                    [
+                        ("preprocess", preprocessing),
+                        ("classifier", RandomForestRegressor(random_state=self.seed, n_estimators=125, n_jobs=-1,
+                                                             max_depth=4, criterion='entropy')),
+                    ]
+                )
+                self.model_pipeline.fit(X=self.train, y=self.target)
+            elif self.estimator == 'decision_tree':
+                logger.info('Selecting Decision tree as surrogate model')
+                self.model_pipeline = Pipeline(
+                    [
+                        ("preprocess", preprocessing),
+                        ("classifier", DecisionTreeRegressor(random_state=self.seed, max_depth=4, criterion='gini')),
+                    ]
+                )
+                self.model_pipeline.fit(X=self.train, y=self.target)
+            else:
+                logger.info('estimator {} is not implemented'.format(self.estimator))
+                raise ValueError('estimator {} is not implemented'.format(self.estimator))
 
     def save(self, save_path: str = None, only_model: bool = False):
         """"""
@@ -95,8 +113,6 @@ class SurrogateModel(object):
         else:
             logger.info('Saving only model')
             model_name = f"{model_name}.pkl"
-            import pdb;
-            pdb.set_trace()
             model = self.model_pipeline['classifier']
             joblib.dump(model, model_name)
 
