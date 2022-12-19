@@ -43,7 +43,7 @@ cffi==1.15.1
 chardet==3.0.4
 charset-normalizer==2.1.1
 chart-studio==1.1.0
-cleo==1.0.0a5
+cleo==1.0.0
 click==8.0.4
 cliff==4.1.0
 cloudpickle==2.2.0
@@ -113,7 +113,7 @@ fugue==0.6.6
 future==0.18.2
 gevent==22.10.2
 gitdb==4.0.10
-GitPython==3.1.29
+# GitPython==3.1.29
 gradio==3.11.0
 graphql-core==3.2.3
 graphviz==0.20.1
@@ -254,7 +254,7 @@ poetry-plugin-export==1.2.0
 prettytable==3.5.0
 prometheus-client==0.15.0
 prompt-toolkit==3.0.33
-protobuf==3.20.1
+protobuf==3.20.2
 psutil==5.9.4
 ptyprocess==0.7.0
 pure-eval==0.2.2
