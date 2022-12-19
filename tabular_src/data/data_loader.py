@@ -21,6 +21,7 @@ class DataLoader(object):
         """"""
         if isinstance(train, str):
             # Read dataframe from csv path
+            self.mode = 'training'
             self.train_path = Path(train)
             self.train_df = pd.read_csv(self.train_path)
             if test is not None:
@@ -32,6 +33,7 @@ class DataLoader(object):
                 self.test_df = None
         elif isinstance(train, pd.DataFrame):
             # Dataframe was directly fed in
+            self.mode = 'training'
             self.train_path = None
             self.train_df = train
             if test is not None:
@@ -41,31 +43,43 @@ class DataLoader(object):
             else:
                 self.test_path = None
                 self.test_df = None
+        else:
+            self.train_df = None
+            assert isinstance(test, str)
+            self.test_path = Path(test)
+            self.test_df = pd.read_csv(self.test_path)
+            self.mode = 'prediction'
         self.target = target_label
         self.seed = seed
         if is_reduce_memory:
             logger.info('Reducing DataFrame memory')
             self.reduce_mem_usages()
-        if not infer_datatype:
-            logger.info('Inferring column types from the input')
-            self.get_col_types(auto=False, categorical_columns=categorical_columns)
+        if not self.mode == 'prediction':
+            # Infer datatype
+            if not infer_datatype:
+                logger.info('Inferring column types from the input')
+                self.get_col_types(auto=False, categorical_columns=categorical_columns)
+            else:
+                logger.info('Inferring column types automatically')
+                self.get_col_types(auto=True, categorical_columns=None)
+
+            # Auto select top features for training
+            if not run_feature_selection:
+                logger.info('Auto feature selection not selected')
+                self.important_columns = None
+            else:
+                feature_selection = FeatureSelection(train_df=self.train_df, rfe_estimator=rfe_estimator, task=task,
+                                                     target=target_label, n_features=n_features,
+                                                     keep_features=keep_features, num_features=self.numerical_cols,
+                                                     text_features=text_features, cat_features=self.categorical_cols,
+                                                     multi_colinear_threshold=multi_colinear_threshold, seed=self.seed)
+                self.important_columns = feature_selection.run_feature_selection()
+            if self.important_columns is not None:
+                self.train_df = self.train_df[self.important_columns]
+            self.train_test_split(test_ratio=test_ratio)
+            logger.info('train shape: {}, test shape: {}'.format(self.train_df.shape, self.test_df.shape))
         else:
-            logger.info('Inferring column types automatically')
-            self.get_col_types(auto=True, categorical_columns=None)
-        if not run_feature_selection:
-            logger.info('Auto feature selection not selected')
-            self.important_columns = None
-        else:
-            feature_selection = FeatureSelection(train_df=self.train_df, rfe_estimator=rfe_estimator, task=task,
-                                                 target=target_label, n_features=n_features,
-                                                 keep_features=keep_features, num_features=self.numerical_cols,
-                                                 text_features=text_features, cat_features=self.categorical_cols,
-                                                 multi_colinear_threshold=multi_colinear_threshold, seed=self.seed)
-            self.important_columns = feature_selection.run_feature_selection()
-        if self.important_columns is not None:
-            self.train_df = self.train_df[self.important_columns]
-        self.train_test_split(test_ratio=test_ratio)
-        logger.info('train shape: {}, test shape: {}'.format(self.train_df.shape, self.test_df.shape))
+            logger.info('prediction shape: {}'.format(self.test_df.shape))
 
     def get_col_types(self, auto: bool = False, categorical_columns: list = None):
         """"""
@@ -116,12 +130,15 @@ class DataLoader(object):
 
     def return_values(self):
         """"""
-        # update categorical and numerical feature list
-        if self.important_columns is not None:
-            logger.info('Updating categorical and numerical cols after feature selection')
-            self.categorical_cols = list(set(self.important_columns).intersection(self.categorical_cols))
-            self.numerical_cols = list(set(self.important_columns).intersection(self.numerical_cols))
-        return self.train_df, self.test_df, self.categorical_cols, self.numerical_cols, self.target
+        if not self.mode == 'prediction':
+            # update categorical and numerical feature list
+            if self.important_columns is not None:
+                logger.info('Updating categorical and numerical cols after feature selection')
+                self.categorical_cols = list(set(self.important_columns).intersection(self.categorical_cols))
+                self.numerical_cols = list(set(self.important_columns).intersection(self.numerical_cols))
+            return self.train_df, self.test_df, self.categorical_cols, self.numerical_cols, self.target
+        else:
+            return self.test_df
 
 
 def reduce_mem_usage(df: pd.DataFrame, verbose=True):

@@ -1,0 +1,77 @@
+paths:
+  train: "${hydra:runtime.cwd}/tabular_src/test/testdata/adult.csv"
+  test:
+  output: "${hydra:runtime.cwd}/results"
+  result: "${hydra:runtime.cwd}/results/exp_3"
+
+columns:
+  categorical_columns: ['workclass', 'fnlwgt', 'education', 'marital.status', 'occupation', 'relationship',
+                        'race', 'sex', 'native.country']
+  text_columns:
+  keep_columns:
+  target_label: 'income'
+
+process:
+  exp_id: 'stack'
+  memory_reduce: True
+  infer_datatype: True
+  test_ratio: 0.2
+  seed: 33
+  task: 'classification'
+  verbose: False
+
+feature_selection:
+  auto: True
+  estimator: 'lightgbm'
+  n_features: 9
+  multi_colinear_threshold: 0.6
+
+data_validation:
+  data_drift: True
+  data_integrity: True
+  save_html: True
+
+defaults:
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+model:
+  algorithm: ['catboost', 'xgboost', 'lightgbm']
+  ensemble: True
+  ensemble_type: 'stack'
+  cv_fold: 4
+  iteration: 30
+  prob_thresh: 0.4
+  tuning: True
+  pca: False
+  calibrate: True
+  feature_importance: True
+  fairness: False
+
+
+hyperparams:
+  - lightgbm:
+  - xgboost:
+  - catboost:
+  - dt:
+  - logistic_regression:
+  - linear_regession:
+  - svm:
+  - rf:
+  - knn:
+  - gbc:
+
+model_performance:
+  threshold:
+  accuracy:
+  f1:
+  precision:
+  recall:
+
+

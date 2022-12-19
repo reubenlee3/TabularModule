@@ -130,8 +130,8 @@ dmypy.json
 
 # Data
 .idea/*
-config/*
-!config/.gitkeep
+#config/*
+#!config/.gitkeep
 data/*
 !data/.gitkeep
 log/*
@@ -143,8 +143,6 @@ notebooks/log*
 results/*
 !results/.gitkeep
 catboost_info/*
-*.csv
 *.html
 *.json
 *.pkl
-!tabular_src/test/testdata/adult.csv

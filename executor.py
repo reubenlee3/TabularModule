@@ -2,6 +2,7 @@ import os.path
 
 import hydra
 from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
+from tabular_src import PyCaretModel
 from tabular_src import get_logger
 
 logger = get_logger(__name__)
@@ -11,7 +12,7 @@ logger = get_logger(__name__)
 def execute_main(cfg) -> None:
     """"""
     # Set-up parameters
-    output_folder = os.path.join(cfg.paths.output, 'exp_1')
+    output_folder = os.path.join(cfg.paths.output, cfg.process.exp_id)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         logger.info('Storing results at {}'.format(output_folder))
@@ -47,8 +48,57 @@ def execute_main(cfg) -> None:
             data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
             # TODO: Action upon data data drift report
 
+        # Train Model
+        pycaret_model = PyCaretModel(train=train_df, target=target_label, task=cfg.process.task, test=test_df,
+                                     estimator_list=cfg.model.algorithm, params=None, n_jobs=-1, use_gpu=False,
+                                     is_multilabel=False, categorical_cols=categorical_cols,
+                                     numerical_cols=numerical_cols, keep_features=None,
+                                     text_cols=None, seed=cfg.process.seed, verbose=cfg.process.verbose)
+
+        pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy='stratifiedkfold',
+                          cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
+                          probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
+                          # custom_grid=None,
+                          n_iter=cfg.model.iteration, search_library='optuna', search_algorithm='tpe',
+                          search_metric='F1', early_stopping=True, early_stopping_max_iters=4,
+                          ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
+
+        pycaret_model.model_evaluation(path=output_folder, plot=True)
+
+        if cfg.model.feature_importance:
+            pycaret_model.feature_explanation(path=output_folder)
+
+        if cfg.model.fairness:
+            pycaret_model.check_fairness()
+
+        pycaret_model.save(path=output_folder, training_data=True, model_stats=True)
     else:
         logger.info('Running Prediction mode')
+        data_loader = DataLoader(train=None, test=cfg.paths.test, is_reduce_memory=cfg.process.memory_reduce,
+                                 infer_datatype=cfg.process.infer_datatype, categorical_columns=None,
+                                 test_ratio=None, target_label=None, run_feature_selection=False,
+                                 rfe_estimator=None, task=cfg.process.task, multi_colinear_threshold=None,
+                                 n_features=None, keep_features=None, text_features=None, seed=cfg.process.seed)
+
+        test_df = data_loader.return_values()
+        # TODO Analyse drift between trained and prediction data
+        # Stop if there is too much drift
+
+        # load model
+        pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,
+                                     is_multilabel=False, seed=cfg.process.seed, verbose=cfg.process.verbose)
+
+        pycaret_model.load(path=cfg.paths.result)
+        # score model
+        test_df['prob_score'] = pycaret_model.predict(data=test_df)
+
+        # save result in the folder
+        output_folder = os.path.join(cfg.paths.result, 'scoring')
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+            logger.info('Storing prediction at {}'.format(output_folder))
+        file_path = os.path.join(output_folder, 'prediction.csv')
+        test_df.to_csv(file_path, index=False)
 
 
 if __name__ == "__main__":

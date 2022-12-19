@@ -94,6 +94,7 @@ explainerdashboard==0.4.0
 fairlearn==0.8.0
 fastapi==0.66.1
 fastjsonschema==2.16.2
+fastparquet==0.8.3
 featuretools==1.18.0
 ffmpy==0.3.0
 filelock==3.8.0
@@ -140,6 +141,7 @@ importlib-metadata==4.13.0
 importlib-resources==5.10.0
 iniconfig==1.1.1
 interpret==0.3.0
+interpret-community==0.27.0
 interpret-core==0.3.0
 ipykernel==6.17.1
 ipython==7.34.0
