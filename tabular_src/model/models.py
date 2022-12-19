@@ -4,7 +4,6 @@ import os
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from category_encoders.count import CountEncoder
 
 from .evaluation import EvaluateClassification
 from ..utils import get_logger
