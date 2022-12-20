@@ -12,7 +12,7 @@ columns:
   target_label: 'income'
 
 process:
-  exp_id: 'surrogate_model'
+  exp_id: 'surrogate_model_2'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
@@ -45,7 +45,7 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['lightgbm']
+  algorithm: ['lightgbm', 'catboost']
   ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4
