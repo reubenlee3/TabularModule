@@ -12,12 +12,12 @@ columns:
   target_label: 'income'
 
 process:
-  exp_id: 'surrogate_model_2'
+  exp_id: 'regression_test_1'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
   seed: 33
-  task: 'classification'
+  task: 'classification' # classification | regression
   verbose: False
   surrogate_model: True
   only_surrogate: False
@@ -45,9 +45,9 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['lightgbm', 'catboost']
-  ensemble: True
-  ensemble_type: 'stack'
+  algorithm: ['lightgbm']
+  ensemble: False
+  ensemble_type: 'stack' 
   cv_fold: 4
   iteration: 30
   prob_thresh: 0.4
@@ -56,7 +56,7 @@ model:
   calibrate: True
   feature_importance: True
   fairness: False
-
+ 
 
 hyperparams:
   - lightgbm:

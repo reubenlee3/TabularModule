@@ -10,3 +10,7 @@
 * There is issue in `Jinja2` package. Open the file <br /> 
 `anaconda3/envs/tabular_test/lib/python3.9/site-packages/starlette/templating.py`
 and edit line `56` rename `jinja2.contextfunction` to `jinja2.pass_context`
+* If you are having issues with `aiohttp` or `multidict` packages on Ubuntu, install GCC first.
+    * `sudo apt update`
+    * `sudo apt install build-essential`
+    * test to ensure that GCC has been installed with `gcc --version`
