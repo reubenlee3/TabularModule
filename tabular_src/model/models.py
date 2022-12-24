@@ -6,6 +6,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .evaluation import EvaluateClassification
+from ..fairness import FairnessClassification
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -13,6 +14,7 @@ logger = get_logger(__name__)
 
 class TabularModels(object):
     """"""
+
     def __init__(self, train: pd.DataFrame = None, test: pd.DataFrame = None,
                  task: str = None, target: str = None, is_multilabel: bool = False):
         self.is_train = False
@@ -49,6 +51,7 @@ class TabularModels(object):
 
 class PyCaretModel(TabularModels):
     """"""
+
     def __init__(self, train: pd.DataFrame = None, target: str = None, task: str = None, test: pd.DataFrame = None,
                  estimator_list: list = None, params: dict = None, n_jobs: int = -1, use_gpu: bool = False,
                  is_multilabel=False, categorical_cols: Union[list, str] = None,
@@ -81,6 +84,7 @@ class PyCaretModel(TabularModels):
         self.seed = seed
         self.verbose = verbose
         self.model = None
+        self.ensemble_model = False
 
     def fit(self, apply_pca: bool = False, remove_outliers: bool = False, fold_strategy: str = 'stratifiedkfold',
             cv_fold_size: int = 4, calibrate: bool = False, probability_threshold: float = 0.5,
@@ -143,6 +147,7 @@ class PyCaretModel(TabularModels):
 
                     logger.info('The best model is {}'.format(type(self.model)))
                 else:
+                    self.ensemble_model = ensemble_model
                     logger.info('Selected ensemble model and ensemble type is {}'.format(ensemble_type))
                     logger.info('Model ensemble is selected')
                     try:
@@ -265,45 +270,81 @@ class PyCaretModel(TabularModels):
             from pycaret.regression import predict_model
             predict_result = predict_model(estimator=self.calibrated_model, data=self.test.drop(columns=[self.target]),
                                            round=2, verbose=self.verbose)['prediction_label']
-            evaluate = EvaluateClassification(labels=self.test[self.target], pred_proba=predict_result,
-                                              multi_label=self.is_multilabel)
-            file_path = os.path.join(path, 'classification')
-            evaluate.save(filepath=file_path, plot=True)
+            # evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target],
+            #                                   pred_proba=predict_result, prob_threshold=0.5,
+            #                                   multi_label=self.is_multilabel)
+            # file_path = os.path.join(path, 'classification')
+            # evaluate.save(filepath=file_path, plot=True)
 
     def feature_explanation(self, path: str = None):
         """"""
         # TODO: Skip feature explanation for ensemble methods
-        if not self.task == 'regression':
-            from pycaret.classification import interpret_model
-            # TODO: Sample Xtrain and Ytrain for larger dataset
-            # X_train = get_config('X_Train')
-            # Y_train = get_config('Y_Train')
+        if not self.ensemble_model:
+            if not self.task == 'regression':
+                from pycaret.classification import interpret_model
+                # TODO: Sample Xtrain and Ytrain for larger dataset
+                # X_train = get_config('X_Train')
+                # Y_train = get_config('Y_Train')
 
-            # default summary plot
-            # file_path = os.path.join(path, 'shap_summary_plot.png')
-            interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=path)
-            # PDP plots for top features list
-            # TODO: implement top features and loop it for pdp
-            # file_path = os.path.join(path, 'pdp_feature_1.png')
-            interpret_model(estimator=self.model, plot='pfi', use_train_data=True, save=path)
-            logger.info('feature importance artifacts is saved in the location : {}'.format(path))
+                # default summary plot
+                # file_path = os.path.join(path, 'shap_summary_plot.png')
+                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=path)
+                # PDP plots for top features list
+                # TODO: implement top features and loop it for pdp
+                # file_path = os.path.join(path, 'pdp_feature_1.png')
+                interpret_model(estimator=self.model, plot='pfi', use_train_data=True, save=path)
+                logger.info('feature importance artifacts is saved in the location : {}'.format(path))
+            else:
+                from pycaret.regression import interpret_model
+                # TODO: Sample Xtrain and Ytrain for larger dataset
+                # X_train = get_config('X_Train')
+                # Y_train = get_config('Y_Train')
+                # default summary plot
+                file_path = os.path.join(path, 'shap_summary_plot.png')
+                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=file_path)
+                # PDP plots for top features list
+                # TODO: implement top features and loop it
+                file_path = os.path.join(path, 'pdp_feature_1.png')
+                interpret_model(estimator=self.model, plot='pdp', use_train_data=True, save=file_path)
+                logger.info('feature importance artifacts is saved in the location : {}'.format(path))
         else:
-            from pycaret.regression import interpret_model
-            # TODO: Sample Xtrain and Ytrain for larger dataset
-            # X_train = get_config('X_Train')
-            # Y_train = get_config('Y_Train')
-            # default summary plot
-            file_path = os.path.join(path, 'shap_summary_plot.png')
-            interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=file_path)
-            # PDP plots for top features list
-            # TODO: implement top features and loop it 
-            file_path = os.path.join(path, 'pdp_feature_1.png')
-            interpret_model(estimator=self.model, plot='pdp', use_train_data=True, save=file_path)
-            logger.info('feature importance artifacts is saved in the location : {}'.format(path))
+            logger.info('No SHAP explanation for ensemble models')
 
-    def check_fairness(self):
+    def check_fairness(self, sensitive_features: list = None, path: str = None):
         """"""
-        pass
+        if sensitive_features is not None:
+            if not self.task == 'regression':
+                from pycaret.classification import predict_model
+                sensitive_cols = list(set(self.test.columns) & set(sensitive_features))
+                if len(sensitive_cols) >= 1:
+                    logger.info('The sensitive features are: {}'.format(sensitive_cols))
+                    test_dataset = self.test[sensitive_cols]
+                    y_test = self.test[self.target]
+                    predict_result = predict_model(estimator=self.calibrated_model,
+                                                   data=self.test.drop(columns=[self.target]),
+                                                   probability_threshold=0.5, raw_score=True, round=2,
+                                                   verbose=self.verbose)['prediction_score_1']
+                    # loop through sensitive features to provide report
+                    fairness = FairnessClassification(labels=y_test, pred_proba=predict_result, prob_threshold=0.5,
+                                                      multi_label=False, sensitive_df=test_dataset, report_path=path)
+                    fairness.calculate_metrics(plot=True)
+                else:
+                    logger.info('The sensitive features:{} not utilised in for '
+                                'model training'.format(sensitive_features))
+            else:
+                # from pycaret.regression import get_config, predict_model
+                # sensitive_cols = list(set(self.test.columns) & set(sensitive_features))
+                # if len(sensitive_cols) >= 1:
+                #     logger.info('The sensitive features are: {}'.format(sensitive_cols))
+                #     test_dataset = self.test[sensitive_cols]
+                #     y_test = self.test[self.target]
+                #     predict_result = predict_model(estimator=self.calibrated_model,
+                #                                    data=self.test.drop(columns=[self.target]), round=2,
+                #                                    verbose=self.verbose)['prediction_score_1']
+                # TODO: Implement for regression
+                pass
+        else:
+            logger.info('Sensitive feature list is empty')
 
     def save(self, path: str = None, model_stats: bool = False,
              training_data: bool = False, extract_tree: bool = False):

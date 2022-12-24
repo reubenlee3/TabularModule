@@ -82,7 +82,7 @@ def execute_main(cfg) -> None:
                 pycaret_model.feature_explanation(path=output_folder)
 
             if cfg.model.fairness:
-                pycaret_model.check_fairness()
+                pycaret_model.check_fairness(sensitive_features=cfg.columns.sensitive_columns, path=output_folder)
 
             pycaret_model.save(path=output_folder, training_data=True, model_stats=True)
         else:
