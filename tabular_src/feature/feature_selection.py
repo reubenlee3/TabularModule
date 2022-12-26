@@ -42,24 +42,24 @@ class FeatureSelection(object):
             from pycaret.regression import setup, set_config, get_config
             classifier = setup(data=self.train_df, target=self.target, n_features_to_select=self.nfeatures,
                                feature_selection=True, remove_multicollinearity=True,
-                               feature_selection_method='classic', keep_features=None,
-                               numeric_features=list(self.train_df.columns).remove(self.target),
-                               categorical_features=None, text_features=None, max_encoding_ohe=2,
+                               feature_selection_method='classic', feature_selection_estimator=self.estimator,
+                               keep_features=None, numeric_features=list(self.train_df.columns).remove(self.target),
+                               categorical_features=None, text_features=None, max_encoding_ohe=20,
                                encoding_method=None, multicollinearity_threshold=self.multi_colinear_ratio)
             set_config('seed', self.seed)
-            feature_columns = list(get_config('X_train').columns)
+            feature_columns = list(get_config('X_train_transformed').columns)
             logger.info('Total columns after running feature selection is {}'.format(len(feature_columns)))
         else:
             logger.info('Selecting classification task to do auto-rfe')
             from pycaret.classification import setup, set_config, get_config
             classifier = setup(data=self.train_df, target=self.target, n_features_to_select=self.nfeatures,
                                feature_selection=True, remove_multicollinearity=True,
-                               feature_selection_method='classic', keep_features=None,
-                               numeric_features=list(self.train_df.columns).remove(self.target),
-                               categorical_features=None, text_features=None, max_encoding_ohe=2,
+                               feature_selection_method='classic', feature_selection_estimator=self.estimator,
+                               keep_features=None, numeric_features=list(self.train_df.columns).remove(self.target),
+                               categorical_features=None, text_features=None, max_encoding_ohe=20,
                                encoding_method=None, multicollinearity_threshold=self.multi_colinear_ratio)
             set_config('seed', self.seed)
-            feature_columns = list(get_config('X_train').columns)
+            feature_columns = list(get_config('X_train_transformed').columns)
             logger.info('Total columns after running feature selection is {}'.format(len(feature_columns)))
         feature_columns.append(self.target)
         if self.text_features is not None:

@@ -51,6 +51,8 @@ class DataLoader(object):
             self.mode = 'prediction'
         self.target = target_label
         self.seed = seed
+        if isinstance(n_features, float):
+            n_features = int(n_features * (self.train_df.shape[1] - 1))
         if is_reduce_memory:
             logger.info('Reducing DataFrame memory')
             self.reduce_mem_usages()
