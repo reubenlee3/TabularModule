@@ -9,21 +9,22 @@ columns:
                         'race', 'sex', 'native.country']
   text_columns:
   keep_columns:
+  sensitive_columns: ['race', 'sex']
   target_label: 'income'
 
 process:
-  exp_id: 'surrogate_model_2'
+  exp_id: 'lightgbm'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
   seed: 33
   task: 'classification'
   verbose: False
-  surrogate_model: True
+  surrogate_model: False
   only_surrogate: False
 
 feature_selection:
-  auto: True
+  auto: False
   estimator: 'lightgbm'
   n_features: 9
   multi_colinear_threshold: 0.6
@@ -45,18 +46,17 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['lightgbm', 'catboost']
+  algorithm: ['lightgbm']
   ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4
   iteration: 30
   prob_thresh: 0.4
-  tuning: True
+  tuning: False
   pca: False
   calibrate: True
-  feature_importance: True
-  fairness: False
-
+  feature_importance: False
+  fairness: True
 
 hyperparams:
   - lightgbm:
@@ -69,12 +69,3 @@ hyperparams:
   - rf:
   - knn:
   - gbc:
-
-model_performance:
-  threshold:
-  accuracy:
-  f1:
-  precision:
-  recall:
-
-

@@ -10,3 +10,8 @@
 * There is issue in `Jinja2` package. Open the file <br /> 
 `anaconda3/envs/tabular_test/lib/python3.9/site-packages/starlette/templating.py`
 and edit line `56` rename `jinja2.contextfunction` to `jinja2.pass_context`
+
+## Training tabular module
+* Configs are in `config/data_config.yaml`
+* To train, cd `TabularModule` and run `python executor.py` in the terminal
+* Results[Model artifacts] are kept in `results/<exp_id_in_config_file>`
