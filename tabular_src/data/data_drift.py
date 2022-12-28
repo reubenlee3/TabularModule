@@ -79,7 +79,7 @@ class TrainingDataDrift(object):
                                              datetime_columns=datetime_columns, task=task,
                                              num_columns=numerical_columns, cat_colummns=categorical_columns)
 
-    def run_drift_checks(self, save_html: bool = False, save_dir: str = None):
+    def run_drift_checks(self, save_html: bool = False, save_dir: str = None, filename: str = 'training_datadrift'):
         """"""
         # dataset-level tests
         t0 = time.time()
@@ -88,13 +88,14 @@ class TrainingDataDrift(object):
         ])
         # datadrift_tests = Report(metrics=[DataDriftPreset(),
         #                                    ])
+        import pdb; pdb.set_trace()
         datadrift_tests.run(current_data=self.test_df, reference_data=self.train_df, column_mapping=self.col_mapping)
         if not save_html:
             logger.info('Not saving data integrity in html/json format')
         else:
-            file_path = os.path.join(save_dir, 'training_datadrift_report.html')
+            file_path = os.path.join(save_dir, '{}_report.html'.format(filename))
             datadrift_tests.save_html(file_path)
-            file_path = os.path.join(save_dir, 'training_datadrift_report.json')
+            file_path = os.path.join(save_dir, '{}_report.json'.format(filename))
             datadrift_tests.save_json(file_path)
             logger.info('Saved Data drift file in {}'.format(file_path))
         # TODO: Modify the dataframe

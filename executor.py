@@ -1,5 +1,5 @@
-import os.path
-
+import os
+import pandas as pd
 import hydra
 from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
 from tabular_src import PyCaretModel, SurrogateModel
@@ -96,6 +96,23 @@ def execute_main(cfg) -> None:
                                  n_features=None, keep_features=None, text_features=None, seed=cfg.process.seed)
 
         test_df = data_loader.return_values()
+        if cfg.data_validation.prediction_drift:
+            logger.info('Running prediction drift')
+            try:
+                file_path = os.path.join(cfg.paths.result, 'training_data.parquet')
+                trained_data = pd.read_parquet(path=file_path, engine='auto')
+                trained_data = trained_data.drop(columns=[cfg.columns.target_label])
+                categorical_cols, numerical_cols = data_loader.get_col_types(data=trained_data, auto=True)
+                data_drift_report = TrainingDataDrift(train_df=trained_data, test_df=test_df,
+                                                      categorical_columns=categorical_cols,
+                                                      numerical_columns=numerical_cols, datetime_columns=None,
+                                                      target_label=None, task=cfg.process.task,
+                                                      seed=cfg.process.seed)
+                import pdb; pdb.set_trace()
+                data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder,
+                                                   filename='prediction_datadrift')
+            except Exception as error:
+                logger.error('Issue in loading trained data: {}'.format(error))
         # TODO Analyse drift between trained and prediction data
         # Stop if there is too much drift
 

@@ -1,8 +1,8 @@
 paths:
-  train: "${hydra:runtime.cwd}/tabular_src/test/testdata/adult.csv"
-  test:
+  train:
+  test: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_test.csv'
   output: "${hydra:runtime.cwd}/results"
-  result: "${hydra:runtime.cwd}/results/exp_3"
+  result: "${hydra:runtime.cwd}/results/lightgbm"
 
 columns:
   categorical_columns: ['workclass', 'fnlwgt', 'education', 'marital.status', 'occupation', 'relationship',
@@ -11,6 +11,7 @@ columns:
   keep_columns:
   sensitive_columns: ['race', 'sex']
   target_label: 'income'
+  drift_columns: []
 
 process:
   exp_id: 'lightgbm'
@@ -24,20 +25,21 @@ process:
   only_surrogate: False
 
 feature_selection:
-  auto: False
+  auto: True
   estimator: 'lightgbm'
   n_features: 9
   multi_colinear_threshold: 0.6
 
 data_validation:
-  data_drift: False
-  data_integrity: False
-  save_html: False
+  data_drift: True
+  data_integrity: True
+  prediction_drift: True
+  save_html: True
 
 defaults:
   - _self_
-  - override hydra/hydra_logging: disabled
-  - override hydra/job_logging: disabled
+  - override hydra/hydra_logging: none
+  - override hydra/job_logging: none
 
 hydra:
   output_subdir: null
@@ -46,13 +48,13 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['lightgbm']
-  ensemble: True
+  algorithm: ['lightgbm', 'catboost']
+  ensemble: False
   ensemble_type: 'stack'
   cv_fold: 4
-  iteration: 30
-  prob_thresh: 0.4
-  tuning: False
+  iteration: 60
+  prob_thresh: 0.5
+  tuning: True
   pca: False
   calibrate: True
   feature_importance: False

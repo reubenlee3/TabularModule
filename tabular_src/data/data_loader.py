@@ -60,10 +60,14 @@ class DataLoader(object):
             # Infer datatype
             if not infer_datatype:
                 logger.info('Inferring column types from the input')
-                self.get_col_types(auto=False, categorical_columns=categorical_columns)
+                self.categorical_cols, self.numerical_cols = self.get_col_types(data=self.train_df, auto=False,
+                                                                                categorical_columns=categorical_columns,
+                                                                                target=self.target)
             else:
                 logger.info('Inferring column types automatically')
-                self.get_col_types(auto=True, categorical_columns=None)
+                self.categorical_cols, self.numerical_cols = self.get_col_types(data=self.train_df, auto=True,
+                                                                                categorical_columns=None,
+                                                                                target=self.target)
 
             # Auto select top features for training
             if not run_feature_selection:
@@ -83,34 +87,37 @@ class DataLoader(object):
         else:
             logger.info('prediction shape: {}'.format(self.test_df.shape))
 
-    def get_col_types(self, auto: bool = False, categorical_columns: list = None):
+    @staticmethod
+    def get_col_types(data: pd.DataFrame, auto: bool = False,
+                      categorical_columns: list = None, target: str = None):
         """"""
         if not auto:
-            columns_list = list(self.train_df.columns)
+            columns_list = list(data.columns)
             numerical_cols = list(set(columns_list) - set(categorical_columns))
-            self.categorical_cols = categorical_columns
-            self.numerical_cols = numerical_cols
+            categorical_cols = categorical_columns
+            numerical_cols = numerical_cols
         else:
             categorical_cols = []
             numerical_cols = []
-            for col in self.train_df.columns:
-                if self.train_df[col].dtype == 'O':
+            for col in data.columns:
+                if data[col].dtype == 'O':
                     categorical_cols.append(col)
                 else:
                     numerical_cols.append(col)
-            self.categorical_cols = categorical_cols
-            self.numerical_cols = numerical_cols
+            categorical_cols = categorical_cols
+            numerical_cols = numerical_cols
         # Remove target column from the list
         try:
-            self.categorical_cols.remove(self.target)
+            categorical_cols.remove(target)
         except ValueError:
             pass
         try:
-            self.numerical_cols.remove(self.target)
+            numerical_cols.remove(target)
         except ValueError:
             pass
         logger.info('Number of categorical columns: {}, numerical columns: {}'
-                    .format(len(self.categorical_cols), len(self.numerical_cols)))
+                    .format(len(categorical_cols), len(numerical_cols)))
+        return categorical_cols, numerical_cols
 
     def reduce_mem_usages(self):
         """"""
