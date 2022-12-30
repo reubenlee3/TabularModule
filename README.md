@@ -15,3 +15,17 @@ and edit line `56` rename `jinja2.contextfunction` to `jinja2.pass_context`
 * Configs are in `config/data_config.yaml`
 * To train, cd `TabularModule` and run `python executor.py` in the terminal
 * Results[Model artifacts] are kept in `results/<exp_id_in_config_file>`
+* Available models in Pycaret Classification are `['lr', 'knn', 'nb', 'dt', 'svm', 'rbfsvm', 'gpc', 'mlp', 'ridge', 
+'rf', 'qda', 'ada', 'gbc', 'lda', 'et', 'xgboost', 'lightgbm', 'catboost', 'dummy']`
+
+## Scoring/Prediction using modules
+* Set the model results path in the config `paths.result`
+* Make sure the model`[classification.pkl/regression.pkl]` exists in the model result's folder.
+* Scored/Prediction dataframe with be saved in the new folder `<paths.result>/scoring`
+
+## TODO's
+1. Implement regression task in the module (Search: `TODO-Regression` in the module)
+2. Act on both independent drift and target drift in both training and prediction mode
+3. Act on Fairness reports (Decide thresholds). Post process results so that model is aligned with FEAT principles
+4. Develop Custom feature explanation module for interpretability
+5. Write Docstrings and Unitest for Module maintainability

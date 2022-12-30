@@ -1,33 +1,35 @@
 paths:
-  train:
-  test: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_test.csv'
-  output: "${hydra:runtime.cwd}/results"
-  result: "${hydra:runtime.cwd}/results/lightgbm"
+  train: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_2.csv'
+  test:
+  output: '${hydra:runtime.cwd}/results'
+  result: '${hydra:runtime.cwd}/results/lightgbm'
 
 columns:
   categorical_columns: ['workclass', 'fnlwgt', 'education', 'marital.status', 'occupation', 'relationship',
                         'race', 'sex', 'native.country']
   text_columns:
-  keep_columns:
+  keep_columns: ['race', 'sex']
   sensitive_columns: ['race', 'sex']
   target_label: 'income'
-  drift_columns: []
+  monotonic_increase_columns: ['education.num', 'hours.per.week']
+  monotonic_decrease_columns:
+  drift_columns: ['education', 'marital.status', 'occupation', 'race', 'hours.per.week']
 
 process:
-  exp_id: 'lightgbm'
+  exp_id: 'cat_xgb_lgb'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
   seed: 33
   task: 'classification'
   verbose: False
-  surrogate_model: False
+  surrogate_model: True
   only_surrogate: False
 
 feature_selection:
   auto: True
   estimator: 'lightgbm'
-  n_features: 9
+  n_features: 0.9
   multi_colinear_threshold: 0.6
 
 data_validation:
@@ -38,8 +40,8 @@ data_validation:
 
 defaults:
   - _self_
-  - override hydra/hydra_logging: none
-  - override hydra/job_logging: none
+  - hydra/hydra_logging: none
+  - hydra/job_logging: none
 
 hydra:
   output_subdir: null
@@ -48,7 +50,7 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['lightgbm', 'catboost']
+  algorithm: ['catboost', 'xgboost', 'lightgbm']
   ensemble: False
   ensemble_type: 'stack'
   cv_fold: 4
@@ -57,17 +59,9 @@ model:
   tuning: True
   pca: False
   calibrate: True
-  feature_importance: False
+  feature_importance: True
   fairness: True
 
 hyperparams:
-  - lightgbm:
-  - xgboost:
-  - catboost:
-  - dt:
-  - logistic_regression:
-  - linear_regession:
-  - svm:
-  - rf:
-  - knn:
-  - gbc:
+  classification_params: '${hydra:runtime.cwd}/config/hyper_params_classification.yaml'
+  regression_params: '${hydra:runtime.cwd}/config/hyper_params_regression.yaml'

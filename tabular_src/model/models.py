@@ -1,13 +1,15 @@
 from typing import Union
 import numpy as np
 import os
+from omegaconf import OmegaConf
+from tqdm import tqdm
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .evaluation import EvaluateClassification
 from ..fairness import FairnessClassification
-from ..utils import get_logger
+from ..utils import pick_custom_grid, monotonic_feature_list, get_logger
 
 logger = get_logger(__name__)
 
@@ -56,11 +58,13 @@ class PyCaretModel(TabularModels):
                  estimator_list: list = None, params: dict = None, n_jobs: int = -1, use_gpu: bool = False,
                  is_multilabel=False, categorical_cols: Union[list, str] = None,
                  numerical_cols: Union[list, str] = None, keep_features: Union[list, str] = None,
+                 monotone_inc_cols: Union[list, str] = None, monotone_dec_cols: Union[list, str] = None,
                  text_cols: Union[list, str] = None, seed: int = None, verbose: bool = True):
         super().__init__(train=train, test=test, task=task, target=target, is_multilabel=is_multilabel)
-        self.train = train
+        self.train = train.drop(columns=target, inplace=False).sort_index(axis=1, ascending=True, inplace=False)
+        self.target_col = train[target]
         self.test = test
-        self.target = target
+        self.target_label = target
         self.estimator = estimator_list
         self.params = params
         self.n_jobs = n_jobs
@@ -69,7 +73,7 @@ class PyCaretModel(TabularModels):
         self.calibrated_model = None
         self.model_pipeline = None
         self.gpu = use_gpu
-        # TODO: Hard-coded gpu to be false
+        # TODO 1: Hard-coded gpu to be false
         if self.gpu:
             logger.info('Checking for GPU installation')
             gpu = False
@@ -84,7 +88,11 @@ class PyCaretModel(TabularModels):
         self.seed = seed
         self.verbose = verbose
         self.model = None
+        self.model_str = None
         self.ensemble_model = False
+        self.monotone_constraints = monotonic_feature_list(columns=self.train.columns.tolist(),
+                                                           monotonic_inc_list=monotone_inc_cols,
+                                                           monotonic_dec_list=monotone_dec_cols)
 
     def fit(self, apply_pca: bool = False, remove_outliers: bool = False, fold_strategy: str = 'stratifiedkfold',
             cv_fold_size: int = 4, calibrate: bool = False, probability_threshold: float = 0.5,
@@ -94,9 +102,9 @@ class PyCaretModel(TabularModels):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import setup, set_config, create_model, tune_model, models, \
-                blend_models, stack_models, calibrate_model, finalize_model, compare_models
+                blend_models, stack_models, calibrate_model, finalize_model, compare_models, pull
             # Set up classifier
-            classifier = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
+            classifier = setup(data=self.train, target=self.target_col, test_data=self.test, feature_selection=False,
                                remove_multicollinearity=True, multicollinearity_threshold=0.6,
                                pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
                                fold=cv_fold_size, keep_features=self.keep_features, numeric_features=self.num_cols,
@@ -107,20 +115,21 @@ class PyCaretModel(TabularModels):
             # create model
             if len(self.estimator) == 1:
                 logger.info('Only one {} estimator is passed for modelling'.format(self.estimator[0]))
-                self.model = create_model(estimator=self.estimator[0], fold=cv_fold_size, round=2,
-                                          cross_validation=True, probability_threshold=probability_threshold,
-                                          verbose=self.verbose)
+                self.model = self.create_custom_model(estimator=self.estimator[0], cv_fold_size=cv_fold_size,
+                                                      cross_validation=True,
+                                                      probability_threshold=probability_threshold, verbose=self.verbose)
+                self.model_str = self.estimator[0]
                 if not optimize:
                     self.tuned_model = self.model
                 else:
-                    self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
-                                                                   n_iter=n_iter, custom_grid=custom_grid,
+                    self.tuned_model, tuner = self._optimize_model(model=self.model, estimator_str=self.model_str,
+                                                                   cv_fold_size=cv_fold_size,
+                                                                   n_iter=n_iter, custom_grid_path=custom_grid,
                                                                    search_metric=search_metric,
                                                                    search_library=search_library,
                                                                    search_algorithm=search_algorithm,
                                                                    early_stopping=early_stopping,
-                                                                   early_stopping_max_iters=early_stopping_max_iters,
-                                                                   )
+                                                                   early_stopping_max_iters=early_stopping_max_iters)
             else:
                 logger.info('There are {} algorithms passed for modelling'.format(len(self.estimator)))
                 # validate estimator list
@@ -128,40 +137,44 @@ class PyCaretModel(TabularModels):
                 self.estimator = list(set(available_models).intersection(self.estimator))
                 if not ensemble_model:
                     logger.info('Ensemble model is not selected , so selecting the best model')
-                    self.model = compare_models(include=self.estimator, fold=cv_fold_size, round=2,
-                                                cross_validation=True, sort=search_metric, n_select=1,
-                                                errors='ignore', probability_threshold=probability_threshold,
-                                                verbose=self.verbose
-                                                )
+                    compare_models(include=self.estimator, fold=cv_fold_size, round=2,
+                                   cross_validation=True, sort=search_metric, n_select=1,
+                                   errors='ignore', probability_threshold=probability_threshold,
+                                   verbose=self.verbose)
+                    self.model_str = pull().index[0]
+                    logger.info('The best model based on {mtr} is {model}'.format(mtr=search_metric,
+                                                                                  model=self.model_str))
+                    self.model = self.create_custom_model(estimator=self.model_str, cv_fold_size=cv_fold_size,
+                                                          cross_validation=True, verbose=self.verbose,
+                                                          probability_threshold=probability_threshold)
                     if not optimize:
                         self.tuned_model = self.model
                     else:
-                        self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
-                                                                       n_iter=n_iter, custom_grid=custom_grid,
+                        self.tuned_model, tuner = self._optimize_model(model=self.model, estimator_str=self.model_str,
+                                                                       cv_fold_size=cv_fold_size,
+                                                                       n_iter=n_iter, custom_grid_path=custom_grid,
                                                                        search_metric=search_metric,
                                                                        search_library=search_library,
                                                                        search_algorithm=search_algorithm,
                                                                        early_stopping=early_stopping,
                                                                        early_stopping_max_iters=early_stopping_max_iters,
                                                                        )
-
-                    logger.info('The best model is {}'.format(type(self.model)))
                 else:
                     self.ensemble_model = ensemble_model
                     logger.info('Selected ensemble model and ensemble type is {}'.format(ensemble_type))
                     logger.info('Model ensemble is selected')
                     try:
                         model_list = []
-                        for estimator in self.estimator:
-                            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
-                                                 cross_validation=True, probability_threshold=probability_threshold,
-                                                 verbose=self.verbose
-                                                 )
+                        for estimator in tqdm(self.estimator):
+                            model = self.create_custom_model(estimator=estimator, cv_fold_size=cv_fold_size,
+                                                             cross_validation=True, verbose=self.verbose,
+                                                             probability_threshold=probability_threshold)
                             if not optimize:
                                 tuned_model = model
                             else:
-                                tuned_model, tuner = self._optimize_model(model=model, cv_fold_size=cv_fold_size,
-                                                                          n_iter=n_iter, custom_grid=custom_grid,
+                                tuned_model, tuner = self._optimize_model(estimator_str=estimator, model=model,
+                                                                          cv_fold_size=cv_fold_size,
+                                                                          n_iter=n_iter, custom_grid_path=custom_grid,
                                                                           search_metric=search_metric,
                                                                           search_library=search_library,
                                                                           search_algorithm=search_algorithm,
@@ -169,7 +182,6 @@ class PyCaretModel(TabularModels):
                                                                           early_stopping_max_iters=early_stopping_max_iters,
                                                                           )
                             model_list.append(tuned_model)
-
                         if ensemble_type == 'stack':
                             logger.info('Model stacking is selected')
                             self.tuned_model = stack_models(estimator_list=model_list, meta_model=None,
@@ -199,41 +211,38 @@ class PyCaretModel(TabularModels):
             self.model_pipeline = finalize_model(self.calibrated_model, model_only=False)
         else:
             from pycaret.regression import setup, set_config
-            regressor = setup(data=self.train, target=self.target, test_data=self.test, feature_selection=False,
+            regressor = setup(data=self.train, target=self.target_col, test_data=self.test, feature_selection=False,
                               remove_multicollinearity=True, multicollinearity_threshold=0.6,
                               pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
                               fold=cv_fold_size, keep_features=self.keep_features, numeric_features=self.num_cols,
                               categorical_features=self.cat_cols, text_features=self.text_cols,
                               max_encoding_ohe=2, encoding_method=None, verbose=self.verbose,
-                              n_jobs=self.n_jobs,
-                              use_gpu=self.gpu)
+                              n_jobs=self.n_jobs, use_gpu=self.gpu)
             set_config('seed', self.seed)
         logger.info('Training completed for PyCaret model')
-        # TODO: Implement for regression
+        # TODO-Regression: Implement for regression
 
-    def _optimize_model(self, model, cv_fold_size: int = 4, n_iter: int = 20, custom_grid: dict = None,
-                        search_metric: str = None, early_stopping: bool = False, search_library: str = None,
-                        search_algorithm: str = None, early_stopping_max_iters: int = None, ):
+    def _optimize_model(self, model, estimator_str: str = None, cv_fold_size: int = 4, n_iter: int = 20,
+                        custom_grid_path: dict = None, search_metric: str = None, early_stopping: bool = False,
+                        search_library: str = None, search_algorithm: str = None,
+                        early_stopping_max_iters: int = None):
         """"""
-        # TODO: Optimise grid based on the estimator
         # tune model
         if not self.task == 'regression':
             from pycaret.classification import tune_model
             logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
                                                                                              search_metric))
-            # from pycaret.distributions import UniformDistribution, IntUniformDistribution
-            # custom_grid = {
-            #     "max_depth": IntUniformDistribution(4, 6, 1),
-            #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
-            # }
+            custom_grid_dict = OmegaConf.load(custom_grid_path)
+            custom_params = pick_custom_grid(estimator=estimator_str, custom_grid_dict=custom_grid_dict)
             model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
-                                      custom_grid=custom_grid, optimize=search_metric,
+                                      custom_grid=custom_params, optimize=search_metric,
                                       search_library=search_library, search_algorithm=search_algorithm,
                                       early_stopping=early_stopping, verbose=self.verbose,
                                       early_stopping_max_iters=early_stopping_max_iters,
-                                      choose_better=True, return_tuner=True)
+                                      choose_better=True, return_tuner=True
+                                      )
         else:
-            # TODO: Modify for regression
+            # TODO-Regression: Modify for regression
             from pycaret.regression import tune_model
             logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
                                                                                              search_metric))
@@ -243,7 +252,7 @@ class PyCaretModel(TabularModels):
             #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
             # }
             model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
-                                      custom_grid=custom_grid, optimize=search_metric,
+                                      custom_grid=custom_grid_path, optimize=search_metric,
                                       search_library=search_library, search_algorithm=search_algorithm,
                                       early_stopping=early_stopping, verbose=self.verbose,
                                       early_stopping_max_iters=early_stopping_max_iters,
@@ -254,10 +263,11 @@ class PyCaretModel(TabularModels):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import predict_model
-            predict_result = predict_model(estimator=self.calibrated_model, data=self.test.drop(columns=[self.target]),
+            predict_result = predict_model(estimator=self.calibrated_model,
+                                           data=self.test.drop(columns=[self.target_label]),
                                            probability_threshold=0.5, raw_score=True, round=2,
                                            verbose=self.verbose)['prediction_score_1']
-            evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target],
+            evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target_label],
                                               pred_proba=predict_result, prob_threshold=0.5,
                                               multi_label=self.is_multilabel)
             file_path = os.path.join(path, 'evaluation_report.json')
@@ -266,11 +276,13 @@ class PyCaretModel(TabularModels):
                 os.makedirs(plot_path)
             evaluate.save(filepath=file_path, plot=plot, plot_path=plot_path)
         else:
-            # TODO: Implement for regression
-            from pycaret.regression import predict_model
-            predict_result = predict_model(estimator=self.calibrated_model, data=self.test.drop(columns=[self.target]),
-                                           round=2, verbose=self.verbose)['prediction_label']
-            # evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target],
+            pass
+            # TODO-Regression: Implement for regression
+            # from pycaret.regression import predict_model
+            # predict_result = predict_model(estimator=self.calibrated_model,
+            #                                data=self.test.drop(columns=[self.target_label]),
+            #                                round=2, verbose=self.verbose)['prediction_label']
+            # evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target_label],
             #                                   pred_proba=predict_result, prob_threshold=0.5,
             #                                   multi_label=self.is_multilabel)
             # file_path = os.path.join(path, 'classification')
@@ -278,35 +290,35 @@ class PyCaretModel(TabularModels):
 
     def feature_explanation(self, path: str = None):
         """"""
-        # TODO: Skip feature explanation for ensemble methods
         if not self.ensemble_model:
+            feature_path = os.path.join(path, 'feature_explanation')
+            if not os.path.exists(os.path.join(feature_path)):
+                os.makedirs(feature_path)
             if not self.task == 'regression':
                 from pycaret.classification import interpret_model
-                # TODO: Sample Xtrain and Ytrain for larger dataset
+                # TODO 2: Sample Xtrain and Ytrain for larger dataset
                 # X_train = get_config('X_Train')
                 # Y_train = get_config('Y_Train')
 
                 # default summary plot
                 # file_path = os.path.join(path, 'shap_summary_plot.png')
-                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=path)
+                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=feature_path)
                 # PDP plots for top features list
-                # TODO: implement top features and loop it for pdp
+                # TODO 3: implement top features and loop it for pdp
                 # file_path = os.path.join(path, 'pdp_feature_1.png')
-                interpret_model(estimator=self.model, plot='pfi', use_train_data=True, save=path)
-                logger.info('feature importance artifacts is saved in the location : {}'.format(path))
+                interpret_model(estimator=self.model, plot='pfi', use_train_data=True, save=feature_path)
+                logger.info('feature importance artifacts is saved in the location : {}'.format(feature_path))
             else:
                 from pycaret.regression import interpret_model
-                # TODO: Sample Xtrain and Ytrain for larger dataset
+                # TODO-Regression: Sample Xtrain and Ytrain for larger dataset
                 # X_train = get_config('X_Train')
                 # Y_train = get_config('Y_Train')
                 # default summary plot
-                file_path = os.path.join(path, 'shap_summary_plot.png')
-                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=file_path)
+                interpret_model(estimator=self.model, plot='summary', use_train_data=True, save=feature_path)
                 # PDP plots for top features list
-                # TODO: implement top features and loop it
-                file_path = os.path.join(path, 'pdp_feature_1.png')
-                interpret_model(estimator=self.model, plot='pdp', use_train_data=True, save=file_path)
-                logger.info('feature importance artifacts is saved in the location : {}'.format(path))
+                # TODO-Regression: implement top features and loop it
+                interpret_model(estimator=self.model, plot='pdp', use_train_data=True, save=feature_path)
+                logger.info('feature importance artifacts is saved in the location : {}'.format(feature_path))
         else:
             logger.info('No SHAP explanation for ensemble models')
 
@@ -319,9 +331,9 @@ class PyCaretModel(TabularModels):
                 if len(sensitive_cols) >= 1:
                     logger.info('The sensitive features are: {}'.format(sensitive_cols))
                     test_dataset = self.test[sensitive_cols]
-                    y_test = self.test[self.target]
+                    y_test = self.test[self.target_label]
                     predict_result = predict_model(estimator=self.calibrated_model,
-                                                   data=self.test.drop(columns=[self.target]),
+                                                   data=self.test.drop(columns=[self.target_label]),
                                                    probability_threshold=0.5, raw_score=True, round=2,
                                                    verbose=self.verbose)['prediction_score_1']
                     # loop through sensitive features to provide report
@@ -337,45 +349,31 @@ class PyCaretModel(TabularModels):
                 # if len(sensitive_cols) >= 1:
                 #     logger.info('The sensitive features are: {}'.format(sensitive_cols))
                 #     test_dataset = self.test[sensitive_cols]
-                #     y_test = self.test[self.target]
+                #     y_test = self.test[self.target_label]
                 #     predict_result = predict_model(estimator=self.calibrated_model,
-                #                                    data=self.test.drop(columns=[self.target]), round=2,
+                #                                    data=self.test.drop(columns=[self.target_label]), round=2,
                 #                                    verbose=self.verbose)['prediction_score_1']
-                # TODO: Implement for regression
+                # TODO-Regression: Implement for regression
                 pass
         else:
             logger.info('Sensitive feature list is empty')
 
-    def save(self, path: str = None, model_stats: bool = False,
-             training_data: bool = False, extract_tree: bool = False):
+    def save(self, path: str = None, training_data: bool = False):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import save_model, pull
             file_path = os.path.join(path, 'classification')
             save_model(self.model_pipeline, model_name=file_path)
-            if model_stats:
-                logger.info('saving model performance')
-                model_performance = pull(pop=False)
-                file_path = os.path.join(path, 'model_performance.csv')
-                model_performance.to_csv(file_path, index=False)
             if training_data:
                 logger.info('Saving training data in parquet format')
                 table = pa.Table.from_pandas(df=self.train, preserve_index=True)
                 file_path = os.path.join(path, 'training_data.parquet')
                 pq.write_table(table, file_path)
-            if extract_tree:
-                logger.info('Extracting tree from pycaret model')
-                # TODO: Extract decision tree from the pycaret using API
             logger.info('model is saved in the location : {}'.format(path))
         else:
-            from pycaret.classification import save_model, pull
+            from pycaret.regression import save_model, pull
             file_path = os.path.join(path, 'regression')
             save_model(self.model_pipeline, model_name=file_path)
-            if model_stats:
-                logger.info('saving model performance')
-                model_performance = pull(pop=False)
-                file_path = os.path.join(path, 'model_performance.csv')
-                model_performance.to_csv(file_path, index=False)
             if training_data:
                 logger.info('Saving training data in parquet format')
                 table = pa.Table.from_pandas(df=self.train, preserve_index=True)
@@ -406,6 +404,23 @@ class PyCaretModel(TabularModels):
             logger.info('prediction done for pycaret classification model')
         else:
             from pycaret.regression import predict_model
+            # TODO-Regression: Implement for regression
             predict_result = predict_model(estimator=self.model_pipeline, data=data, round=2, verbose=self.verbose)
             logger.info('prediction done for pycaret regression model')
         return predict_result['prediction_score_1']
+
+    def create_custom_model(self, estimator: str = None, cv_fold_size: int = 4, probability_threshold: float = 0.5,
+                            cross_validation: bool = True, verbose: bool = False):
+        """"""
+        from pycaret.classification import create_model
+        if estimator not in ['catboost', 'xgboost']:
+            logger.info('Model is {}, So cannot apply monotonic function'.format(estimator))
+            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                 cross_validation=cross_validation, probability_threshold=probability_threshold,
+                                 verbose=verbose)
+        else:
+            logger.info('Model is {}, So apply monotonic function'.format(estimator))
+            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                 cross_validation=cross_validation, probability_threshold=probability_threshold,
+                                 monotone_constraints=self.monotone_constraints, verbose=verbose)
+        return model

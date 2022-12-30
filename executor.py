@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import time
 import hydra
 from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
 from tabular_src import PyCaretModel, SurrogateModel
@@ -12,6 +13,7 @@ logger = get_logger(__name__)
 def execute_main(cfg) -> None:
     """"""
     # Set-up parameters
+    t0 = time.time()
     output_folder = os.path.join(cfg.paths.output, cfg.process.exp_id)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -35,8 +37,9 @@ def execute_main(cfg) -> None:
                                                target_label=target_label, task=cfg.process.task,
                                                seed=cfg.process.seed
                                                )
-            data_integrity.run_integrity_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
-            # TODO: Action upon data integrity report
+            data_integrity.run_integrity_checks(save_html=cfg.data_validation.save_html,
+                                                save_dir=os.path.join(output_folder, 'reports'))
+            # TODO 1: Action upon data integrity report
 
         if cfg.data_validation.data_drift:
             data_drift_report = TrainingDataDrift(train_df=train_df, test_df=test_df,
@@ -44,9 +47,11 @@ def execute_main(cfg) -> None:
                                                   numerical_columns=numerical_cols, datetime_columns=None,
                                                   target_label=target_label, task=cfg.process.task,
                                                   seed=cfg.process.seed)
-            data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
-            data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder)
-            # TODO: Action upon data data drift report
+            data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
+                                               save_dir=os.path.join(output_folder, 'reports'))
+            data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html,
+                                                      save_dir=os.path.join(output_folder, 'reports'))
+            # TODO 2: Action upon data data drift report - stop training
 
         # build surrogate model
         if cfg.process.surrogate_model:
@@ -58,35 +63,48 @@ def execute_main(cfg) -> None:
                                              categorical_columns=categorical_cols, numerical_columns=numerical_cols,
                                              seed=cfg.process.seed)
             surrogate_model.fit()
-            surrogate_model.save(save_path=output_folder, only_model=True)
+            surrogate_model_path = os.path.join(output_folder, 'surrogate_model')
+            if not os.path.exists(surrogate_model_path):
+                os.makedirs(surrogate_model_path)
+            surrogate_model.save(save_path=surrogate_model_path, only_model=True)
 
         if not cfg.process.only_surrogate:
             # Train Model
             pycaret_model = PyCaretModel(train=train_df, target=target_label, task=cfg.process.task, test=test_df,
                                          estimator_list=cfg.model.algorithm, params=None, n_jobs=-1, use_gpu=False,
                                          is_multilabel=False, categorical_cols=categorical_cols,
-                                         numerical_cols=numerical_cols, keep_features=None,
-                                         text_cols=None, seed=cfg.process.seed, verbose=cfg.process.verbose)
+                                         numerical_cols=numerical_cols, keep_features=None, text_cols=None,
+                                         monotone_inc_cols=cfg.columns.monotonic_increase_columns,
+                                         monotone_dec_cols=cfg.columns.monotonic_decrease_columns,
+                                         seed=cfg.process.seed, verbose=cfg.process.verbose)
+
+            if not cfg.process.task == 'regression':
+                custom_params_grid = cfg.hyperparams.classification_params
+            else:
+                custom_params_grid = cfg.hyperparams.regression_params
 
             pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy='stratifiedkfold',
                               cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
                               probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
-                              # custom_grid=None,
-                              n_iter=cfg.model.iteration, search_library='optuna', search_algorithm='tpe',
-                              search_metric='F1', early_stopping=True, early_stopping_max_iters=4,
-                              ensemble_model=cfg.model.ensemble, ensemble_type=cfg.model.ensemble_type)
+                              custom_grid=custom_params_grid, n_iter=cfg.model.iteration, search_library='optuna',
+                              search_algorithm='tpe', search_metric='F1', early_stopping=True,
+                              early_stopping_max_iters=4, ensemble_model=cfg.model.ensemble,
+                              ensemble_type=cfg.model.ensemble_type)
 
             pycaret_model.model_evaluation(path=output_folder, plot=True)
 
             if cfg.model.feature_importance:
+                # TODO 3: Write Custom SHAP, ICE or Feature Permutation plots
                 pycaret_model.feature_explanation(path=output_folder)
 
             if cfg.model.fairness:
                 pycaret_model.check_fairness(sensitive_features=cfg.columns.sensitive_columns, path=output_folder)
 
-            pycaret_model.save(path=output_folder, training_data=True, model_stats=True)
+            pycaret_model.save(path=output_folder, training_data=True)
         else:
             logger.info('only surrogate model training is selected')
+        t1 = time.time()
+        logger.info('Total training time is {:.2f} Secs'.format(t1-t0))
     else:
         logger.info('Running Prediction mode')
         data_loader = DataLoader(train=None, test=cfg.paths.test, is_reduce_memory=cfg.process.memory_reduce,
@@ -108,13 +126,12 @@ def execute_main(cfg) -> None:
                                                       numerical_columns=numerical_cols, datetime_columns=None,
                                                       target_label=None, task=cfg.process.task,
                                                       seed=cfg.process.seed)
-                import pdb; pdb.set_trace()
-                data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html, save_dir=output_folder,
+                data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
+                                                   save_dir=os.path.join(output_folder, 'reports'),
                                                    filename='prediction_datadrift')
             except Exception as error:
                 logger.error('Issue in loading trained data: {}'.format(error))
-        # TODO Analyse drift between trained and prediction data
-        # Stop if there is too much drift
+        # TODO 4: Stop if there is too much drift between train and prediction
 
         # load model
         pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,

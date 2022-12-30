@@ -30,7 +30,6 @@ class PerformanceMetric(object):
             self.labels = labels
             self.preds = preds
             fbeta_06 = functools.partial(fbeta_score, beta=0.6, zero_division=1)
-
             metric_fns = {"selection_rate": selection_rate,
                           "accuracy": accuracy_score,
                           "precision": precision_score,
@@ -48,7 +47,7 @@ class PerformanceMetric(object):
             self.groups = grouped_on_feature.by_group
         else:
             logger.info('Evaluation is set for multi-classification')
-            # TODO: Implement for multiclass
+            # TODO 1: Implement performance for multiclass
             # self.confusion_matrix = multilabel_confusion_matrix(labels, self.preds)
 
     def show(self):
@@ -138,7 +137,7 @@ class FairnessMetric(object):
                 raise ValueError('Invalid parity method {}. Method should be difference or ratio'.format(parity_method))
         else:
             logger.info('Evaluation is set for multi-classification')
-            # TODO: Implement for multiclass
+            # TODO 2: Implement fairness metrics for multiclass
             # self.confusion_matrix = multilabel_confusion_matrix(labels, self.preds)
 
     def show(self):

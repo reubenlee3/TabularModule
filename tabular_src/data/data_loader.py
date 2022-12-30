@@ -74,6 +74,7 @@ class DataLoader(object):
                 logger.info('Auto feature selection not selected')
                 self.important_columns = None
             else:
+                # TODO [bug]: Select RFE with keep_features parameter in the Setup:PyCaret
                 feature_selection = FeatureSelection(train_df=self.train_df, rfe_estimator=rfe_estimator, task=task,
                                                      target=target_label, n_features=n_features,
                                                      keep_features=keep_features, num_features=self.numerical_cols,

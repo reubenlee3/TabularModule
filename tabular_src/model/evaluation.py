@@ -68,7 +68,7 @@ class EvaluateClassification(object):
             self.confusion_matrix = confusion_matrix(labels, self.preds)
         else:
             logger.info('Evaluation is set for multi-classification')
-            # TODO: Implement for multiclass
+            # TODO 2: Implement for multiclass
             # self.confusion_matrix = multilabel_confusion_matrix(labels, self.preds)
         self.classification_report = classification_report(labels, self.preds, output_dict=True)
 
@@ -133,7 +133,7 @@ class EvaluateClassification(object):
 
 
 class EvaluateRegression(object):
-    # TODO: Implement for regression
+    # TODO 1: Implement for regression
 
     def __init__(self, labels, preds, multi_label=False):
         assert isinstance(labels, (pd.Series, np.ndarray))

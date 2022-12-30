@@ -44,6 +44,8 @@ class DataIntegrityTest(object):
         if not save_html:
             logger.info('Not saving data integrity in html/json format')
         else:
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
             file_path = os.path.join(save_dir, 'data_integrity_report.html')
             data_integrity_dataset_tests.save_html(file_path)
             file_path = os.path.join(save_dir, 'data_integrity_report.json')
@@ -57,7 +59,7 @@ class DataIntegrityTest(object):
 
     def act_testresults(self, test_results: dict = None) -> pd.DataFrame:
         """"""
-        # TODO WORK ON CLEANING TRAINING DATA BASED ON THE TEST RESULTS
+        # TODO 2: WORK ON CLEANING TRAINING DATA BASED ON THE TEST RESULTS
 
 
 class TrainingDataDrift(object):
@@ -88,17 +90,18 @@ class TrainingDataDrift(object):
         ])
         # datadrift_tests = Report(metrics=[DataDriftPreset(),
         #                                    ])
-        import pdb; pdb.set_trace()
         datadrift_tests.run(current_data=self.test_df, reference_data=self.train_df, column_mapping=self.col_mapping)
         if not save_html:
             logger.info('Not saving data integrity in html/json format')
         else:
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
             file_path = os.path.join(save_dir, '{}_report.html'.format(filename))
             datadrift_tests.save_html(file_path)
             file_path = os.path.join(save_dir, '{}_report.json'.format(filename))
             datadrift_tests.save_json(file_path)
             logger.info('Saved Data drift file in {}'.format(file_path))
-        # TODO: Modify the dataframe
+        # TODO: Return dict to process further
         # test_results = data_integrity_dataset_tests.as_dict()
         # self.df = self.act_testresults(test_results=test_results)
         t1 = time.time()
@@ -118,34 +121,23 @@ class TrainingDataDrift(object):
         if not save_html:
             logger.info('Not saving data integrity in html/json format')
         else:
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.html')
             target_drift_tests.save_html(file_path)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.json')
             target_drift_tests.save_json(file_path)
             logger.info('Saved Data drift file in {}'.format(file_path))
-        # TODO: Modify the dataframe
+        # TODO: Return dict to process further
         # test_results = data_integrity_dataset_tests.as_dict()
         # self.df = self.act_testresults(test_results=test_results)
         t1 = time.time()
         logger.info('time taken to generate target-drift is {:.2f} secs'.format(t1 - t0))
 
-    # def data_drift_report(training_data: pd.DataFrame = None, test_data: pd.DataFrame = None,
-    #                       save_dir: str = None):
-    #     """"""
-    #     logger.info('Calculating Data drift between training and testing dataframes')
-    #     t0 = time.time()
-    #     drift_report = Report(metrics=[DataDriftPreset(),
-    #                                    ])
-    #     drift_report.run(current_data=test_data, reference_data=training_data)
-    #     file_path = os.path.join(save_dir, 'data_drift_report.html')
-    #     drift_report.save_html(file_path)
-    #     t1 = time.time()
-    #     logger.info('time taken to generate drift is {:.2f} secs'.format(t1 - t0))
-    #     logger.info('Saved Data drift file in {}'.format(file_path))
-
     def act_drift_results(self, test_results: dict = None) -> pd.DataFrame:
         """"""
-        # TODO WORK ON CLEANING TRAINING DATA BASED ON THE TEST RESULTS
+        pass
+        # TODO 1: WORK ON CLEANING TRAINING DATA BASED ON THE TEST RESULTS
 
 
 def create_colmapping(target: str = None, prediction: str = None, datetime_columns: list = None,
