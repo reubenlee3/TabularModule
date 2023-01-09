@@ -61,8 +61,12 @@ class PyCaretModel(TabularModels):
                  monotone_inc_cols: Union[list, str] = None, monotone_dec_cols: Union[list, str] = None,
                  text_cols: Union[list, str] = None, seed: int = None, verbose: bool = True):
         super().__init__(train=train, test=test, task=task, target=target, is_multilabel=is_multilabel)
-        self.train = train.drop(columns=target, inplace=False).sort_index(axis=1, ascending=True, inplace=False)
-        self.target_col = train[target]
+        if target is not None:
+            self.train = train.drop(columns=target, inplace=False).sort_index(axis=1, ascending=True, inplace=False)
+            self.target_col = train[target]
+        else:
+            self.train = train
+            self.target_col = target
         self.test = test
         self.target_label = target
         self.estimator = estimator_list
@@ -90,9 +94,12 @@ class PyCaretModel(TabularModels):
         self.model = None
         self.model_str = None
         self.ensemble_model = False
-        self.monotone_constraints = monotonic_feature_list(columns=self.train.columns.tolist(),
-                                                           monotonic_inc_list=monotone_inc_cols,
-                                                           monotonic_dec_list=monotone_dec_cols)
+        if self.train is not None:
+            self.monotone_constraints = monotonic_feature_list(columns=self.train.columns.tolist(),
+                                                               monotonic_inc_list=monotone_inc_cols,
+                                                               monotonic_dec_list=monotone_dec_cols)
+        else:
+            self.monotone_constraints = None
 
     def fit(self, apply_pca: bool = False, remove_outliers: bool = False, fold_strategy: str = 'stratifiedkfold',
             cv_fold_size: int = 4, calibrate: bool = False, probability_threshold: float = 0.5,
@@ -366,6 +373,8 @@ class PyCaretModel(TabularModels):
             save_model(self.model_pipeline, model_name=file_path)
             if training_data:
                 logger.info('Saving training data in parquet format')
+                half_floats = self.train.select_dtypes(include="float16")
+                self.train[half_floats.columns] = half_floats.astype("float32")
                 table = pa.Table.from_pandas(df=self.train, preserve_index=True)
                 file_path = os.path.join(path, 'training_data.parquet')
                 pq.write_table(table, file_path)
@@ -376,6 +385,8 @@ class PyCaretModel(TabularModels):
             save_model(self.model_pipeline, model_name=file_path)
             if training_data:
                 logger.info('Saving training data in parquet format')
+                half_floats = self.train.select_dtypes(include="float16")
+                self.train[half_floats.columns] = half_floats.astype("float32")
                 table = pa.Table.from_pandas(df=self.train, preserve_index=True)
                 file_path = os.path.join(path, 'training_data.parquet')
                 pq.write_table(table, file_path)

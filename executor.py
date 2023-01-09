@@ -32,26 +32,46 @@ def execute_main(cfg) -> None:
                                  text_features=cfg.columns.text_columns, seed=cfg.process.seed)
         train_df, test_df, categorical_cols, numerical_cols, target_label = data_loader.return_values()
         if cfg.data_validation.data_integrity:
+            # Data integrity tests
             data_integrity = DataIntegrityTest(df=train_df, categorical_columns=categorical_cols,
                                                numerical_columns=numerical_cols, datetime_columns=None,
                                                target_label=target_label, task=cfg.process.task,
                                                seed=cfg.process.seed
                                                )
-            data_integrity.run_integrity_checks(save_html=cfg.data_validation.save_html,
-                                                save_dir=os.path.join(output_folder, 'reports'))
-            # TODO 1: Action upon data integrity report
+            data_integrity_report = data_integrity.run_integrity_checks(save_html=cfg.data_validation.save_html,
+                                                                        return_dict=True,
+                                                                        save_dir=os.path.join(output_folder, 'reports'))
+            train_df = data_integrity.act_testresults(test_results=data_integrity_report)
+            # update data
+            test_df = test_df[train_df.columns]
+            categorical_cols = list(set(categorical_cols) & set(train_df.columns))
+            numerical_cols = list(set(numerical_cols) & set(train_df.columns))
 
         if cfg.data_validation.data_drift:
-            data_drift_report = TrainingDataDrift(train_df=train_df, test_df=test_df,
-                                                  categorical_columns=categorical_cols,
-                                                  numerical_columns=numerical_cols, datetime_columns=None,
-                                                  target_label=target_label, task=cfg.process.task,
-                                                  seed=cfg.process.seed)
-            data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
-                                               save_dir=os.path.join(output_folder, 'reports'))
-            data_drift_report.run_target_drift_checks(save_html=cfg.data_validation.save_html,
-                                                      save_dir=os.path.join(output_folder, 'reports'))
-            # TODO 2: Action upon data data drift report - stop training
+            data_drift = TrainingDataDrift(train_df=train_df, test_df=test_df,
+                                           categorical_columns=categorical_cols,
+                                           numerical_columns=numerical_cols, datetime_columns=None,
+                                           target_label=target_label, task=cfg.process.task,
+                                           seed=cfg.process.seed)
+            # Data-Drift
+            data_drift_report = data_drift.run_drift_checks(save_html=cfg.data_validation.save_html,
+                                                            save_dir=os.path.join(output_folder, 'reports'),
+                                                            return_dict=True)
+            datadrift_status = data_drift.act_drift_results(test_results=data_drift_report, drift_thresh=0.5)
+            # Concept-Drift
+            concept_drift_report = data_drift.run_target_drift_checks(save_html=cfg.data_validation.save_html,
+                                                                      save_dir=os.path.join(output_folder, 'reports'),
+                                                                      return_dict=True)
+            conceptdrift_status = data_drift.act_target_drift_results(test_results=concept_drift_report,
+                                                                      drift_thresh=0.5)
+            # Check status to continue the model training
+            if datadrift_status and conceptdrift_status:
+                logger.info('Continuing model training. Model passed both data and concept drift')
+            else:
+                logger.info('Data drift status is {} and Concept drift status is {}'.format(datadrift_status,
+                                                                                            conceptdrift_status))
+                logger.info('Stopping Model training!!!!')
+                # TODO 1: if process_status is false stop the training
 
         # build surrogate model
         if cfg.process.surrogate_model:
@@ -104,7 +124,7 @@ def execute_main(cfg) -> None:
         else:
             logger.info('only surrogate model training is selected')
         t1 = time.time()
-        logger.info('Total training time is {:.2f} Secs'.format(t1-t0))
+        logger.info('Total training time is {:.2f} Secs'.format(t1 - t0))
     else:
         logger.info('Running Prediction mode')
         data_loader = DataLoader(train=None, test=cfg.paths.test, is_reduce_memory=cfg.process.memory_reduce,
@@ -119,19 +139,25 @@ def execute_main(cfg) -> None:
             try:
                 file_path = os.path.join(cfg.paths.result, 'training_data.parquet')
                 trained_data = pd.read_parquet(path=file_path, engine='auto')
-                trained_data = trained_data.drop(columns=[cfg.columns.target_label])
+                # trained_data = trained_data.drop(columns=[cfg.columns.target_label])
                 categorical_cols, numerical_cols = data_loader.get_col_types(data=trained_data, auto=True)
-                data_drift_report = TrainingDataDrift(train_df=trained_data, test_df=test_df,
-                                                      categorical_columns=categorical_cols,
-                                                      numerical_columns=numerical_cols, datetime_columns=None,
-                                                      target_label=None, task=cfg.process.task,
-                                                      seed=cfg.process.seed)
-                data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
-                                                   save_dir=os.path.join(output_folder, 'reports'),
-                                                   filename='prediction_datadrift')
+                data_drift = TrainingDataDrift(train_df=trained_data, test_df=test_df,
+                                               categorical_columns=categorical_cols,
+                                               numerical_columns=numerical_cols, datetime_columns=None,
+                                               target_label=None, task=cfg.process.task,
+                                               seed=cfg.process.seed)
+                data_drift_report = data_drift.run_drift_checks(save_html=cfg.data_validation.save_html,
+                                                                save_dir=os.path.join(output_folder, 'reports'),
+                                                                filename='prediction_datadrift',
+                                                                return_dict=True)
+                # data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
+                #                                    save_dir=os.path.join(output_folder, 'reports'),
+                #                                    )
+                datadrift_status = data_drift.act_drift_results(test_results=data_drift_report, drift_thresh=0.5)
+                # TODO 2: Stop if there is too much drift between train and prediction
+
             except Exception as error:
                 logger.error('Issue in loading trained data: {}'.format(error))
-        # TODO 4: Stop if there is too much drift between train and prediction
 
         # load model
         pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,
