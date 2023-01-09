@@ -1,8 +1,8 @@
 paths:
-  train: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_2.csv'
-  test:
+  train:
+  test: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_test.csv'
   output: '${hydra:runtime.cwd}/results'
-  result: '${hydra:runtime.cwd}/results/lightgbm'
+  result: '${hydra:runtime.cwd}/results/test'
 
 columns:
   categorical_columns: ['workclass', 'fnlwgt', 'education', 'marital.status', 'occupation', 'relationship',
@@ -16,7 +16,7 @@ columns:
   drift_columns: ['education', 'marital.status', 'occupation', 'race', 'hours.per.week']
 
 process:
-  exp_id: 'cat_xgb_lgb'
+  exp_id: 'test'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2

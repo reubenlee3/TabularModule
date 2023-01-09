@@ -1,4 +1,4 @@
-from .data import DataIntegrityTest, TrainingDataDrift, DataLoader
+from .data import DataIntegrityTest, TrainingDataDrift, DriftActions, DataLoader
 from .feature import FeatureSelection
 from .fairness import FairnessClassification
 from .model import EvaluateClassification, EvaluateRegression, TabularModels, PyCaretModel, SurrogateModel
