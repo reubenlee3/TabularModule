@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 import json
+import os
 from copy import deepcopy
 from sklearn.metrics import (f1_score, accuracy_score, confusion_matrix, precision_score, recall_score,
                              multilabel_confusion_matrix, log_loss, roc_auc_score, classification_report)
-
+from ..data import DataLoader, PerformanceDrift
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -39,19 +40,22 @@ class HelperMetricCalculation(object):
 
 class EvaluateClassification(object):
     """"""
-    def __init__(self, estimator, labels, pred_proba, prob_threshold, multi_label=False):
+    def __init__(self, estimator, labels, pred_proba, preds_label, prob_threshold, multi_label=False, seed: int = 33):
         assert isinstance(labels, (pd.Series, np.ndarray))
-        assert isinstance(pred_proba, (pd.Series, np.ndarray))
         if isinstance(labels, pd.Series):
             labels = np.asarray(labels)
         if isinstance(pred_proba, pd.Series):
             pred_proba = np.asarray(pred_proba)
-
+        self.multi_label = multi_label
+        self.seed = seed
         if not multi_label:
             logger.info('Evaluation is set for binary-classification')
             self.labels = labels
             self.pred_proba = pred_proba
-            self.preds = np.where(self.pred_proba < prob_threshold, 0, 1)
+            if preds_label is not None:
+                self.preds = np.asarray(preds_label)
+            else:
+                self.preds = np.where(self.pred_proba < prob_threshold, 0, 1)
             self.estimator = estimator
 
             s = HelperMetricCalculation(self.labels, self.preds, self.pred_proba)
@@ -130,6 +134,23 @@ class EvaluateClassification(object):
         plot_model(estimator=self.estimator, plot='lift', save=path, use_train_data=False)
         plot_model(estimator=self.estimator, plot='gain', save=path, use_train_data=False)
         plot_model(estimator=self.estimator, plot='auc', save=path, use_train_data=False)
+
+    def drift(self, predict_df: pd.DataFrame = None, prior_model_result: str = None,
+              report_path: str = None, target_label: str = None, prediction_label: str = None):
+        """"""
+        try:
+            logger.info('There is no evaluation with prior model results')
+            previous_pred = pd.read_parquet(path=prior_model_result, engine='auto')
+            result_drift = PerformanceDrift(prediction_latest=predict_df[[target_label, prediction_label]],
+                                            prediction_earlier=previous_pred[[target_label, prediction_label]],
+                                            categorical_columns=None, numerical_columns=None, datetime_columns=None,
+                                            target_label=target_label, prediction_label=prediction_label,
+                                            task='classification', seed=self.seed)
+            result_drift.run_drift_checks(top_k=10, multi_label=self.multi_label, save_html=True,
+                                          save_dir=os.path.join(report_path, 'reports'),
+                                          filename='performance_datadrift', return_dict=False)
+        except Exception as error:
+            logger.error('Issue in evaluating with previous model results'.format(error))
 
 
 class EvaluateRegression(object):

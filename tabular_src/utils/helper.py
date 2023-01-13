@@ -1,4 +1,8 @@
 from typing import Dict, Union, Tuple
+import os
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pycaret.distributions import UniformDistribution, IntUniformDistribution, CategoricalDistribution
 import copy
 from .log import get_logger
@@ -54,3 +58,21 @@ def monotonic_feature_list(columns: list = None, monotonic_inc_list: list = None
     else:
         logger.info('There are no monotonic features in the data')
         return None
+
+
+def latest_file(folder_path: str = None, file_format: str = '.csv') -> str:
+    """"""
+    files = os.listdir(folder_path)
+    paths = [os.path.join(folder_path, basename) for basename in files if basename.endswith(file_format)]
+    return max(paths, key=os.path.getmtime)
+
+
+def save_parquet(df: pd.DataFrame = None, path: str = None, file_name: str = 'data.parquet'):
+    """"""
+    logger.info('Saving data in parquet format')
+    half_floats = df.select_dtypes(include="float16")
+    df[half_floats.columns] = half_floats.astype("float32")
+    table = pa.Table.from_pandas(df=df, preserve_index=True)
+    file_path = os.path.join(path, file_name)
+    pq.write_table(table, file_path)
+    logger.info('Saved data in parquet format in {}'.format(file_path))

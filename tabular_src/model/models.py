@@ -7,9 +7,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ..data import DataLoader, PerformanceDrift
 from .evaluation import EvaluateClassification
 from ..fairness import FairnessClassification
-from ..utils import pick_custom_grid, monotonic_feature_list, get_logger
+from ..utils import pick_custom_grid, monotonic_feature_list, save_parquet, get_logger
 
 logger = get_logger(__name__)
 
@@ -76,6 +77,7 @@ class PyCaretModel(TabularModels):
         self.tuned_model = None
         self.calibrated_model = None
         self.model_pipeline = None
+        self.test_result = None
         self.gpu = use_gpu
         # TODO 1: Hard-coded gpu to be false
         if self.gpu:
@@ -266,22 +268,39 @@ class PyCaretModel(TabularModels):
                                       choose_better=True, return_tuner=True)
         return model, tuner
 
-    def model_evaluation(self, path: str = None, plot: bool = False):
+    def model_evaluation(self, path: str = None, plot: bool = False, prior_model_result: str = None):
         """"""
+        eval_results_path = os.path.join(path, 'evaluation')
+        if not os.path.exists(eval_results_path):
+            os.makedirs(eval_results_path)
+
         if not self.task == 'regression':
             from pycaret.classification import predict_model
             predict_result = predict_model(estimator=self.calibrated_model,
                                            data=self.test.drop(columns=[self.target_label]),
                                            probability_threshold=0.5, raw_score=True, round=2,
-                                           verbose=self.verbose)['prediction_score_1']
+                                           verbose=self.verbose).filter(regex="prediction_.*", axis=1)
+            self.test_result = pd.concat([self.test.reset_index(drop=True, inplace=False),
+                                          predict_result.reset_index(drop=True, inplace=False)], axis=1)
             evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target_label],
-                                              pred_proba=predict_result, prob_threshold=0.5,
-                                              multi_label=self.is_multilabel)
-            file_path = os.path.join(path, 'evaluation_report.json')
-            plot_path = os.path.join(path, 'evaluation_plots')
+                                              preds_label=predict_result[['prediction_label']], pred_proba=None,
+                                              prob_threshold=None, multi_label=self.is_multilabel, seed=self.seed)
+            file_path = os.path.join(eval_results_path, 'evaluation_report.json')
+
+            plot_path = os.path.join(eval_results_path, 'plots')
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
             evaluate.save(filepath=file_path, plot=plot, plot_path=plot_path)
+            # evaluate with earlier test performances
+            if prior_model_result is not None:
+                try:
+                    evaluate.drift(predict_df=self.test_result, prior_model_result=prior_model_result,
+                                   report_path=eval_results_path, target_label=self.target_label,
+                                   prediction_label='prediction_label')
+                except Exception as error:
+                    logger.error('Issue in evaluating with previous model results: {}'.format(error))
+            else:
+                logger.info('There is no evaluation with prior model results')
         else:
             pass
             # TODO-Regression: Implement for regression
@@ -365,47 +384,37 @@ class PyCaretModel(TabularModels):
         else:
             logger.info('Sensitive feature list is empty')
 
-    def save(self, path: str = None, training_data: bool = False):
+    def save(self, path: str = None, save_with_data: bool = False):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import save_model, pull
-            file_path = os.path.join(path, 'classification')
-            save_model(self.model_pipeline, model_name=file_path)
-            if training_data:
-                logger.info('Saving training data in parquet format')
-                half_floats = self.train.select_dtypes(include="float16")
-                self.train[half_floats.columns] = half_floats.astype("float32")
-                table = pa.Table.from_pandas(df=self.train, preserve_index=True)
-                file_path = os.path.join(path, 'training_data.parquet')
-                pq.write_table(table, file_path)
-            logger.info('model is saved in the location : {}'.format(path))
         else:
             from pycaret.regression import save_model, pull
-            file_path = os.path.join(path, 'regression')
-            save_model(self.model_pipeline, model_name=file_path)
-            if training_data:
-                logger.info('Saving training data in parquet format')
-                half_floats = self.train.select_dtypes(include="float16")
-                self.train[half_floats.columns] = half_floats.astype("float32")
-                table = pa.Table.from_pandas(df=self.train, preserve_index=True)
-                file_path = os.path.join(path, 'training_data.parquet')
-                pq.write_table(table, file_path)
-            logger.info('model is saved in the location : {}'.format(path))
+        file_path = os.path.join(path, str(self.task))
+        save_model(self.model_pipeline, model_name=file_path)
+        if save_with_data:
+            data_path = os.path.join(path, 'dataset')
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+                logger.info('Storing trained data-frame at {}'.format(data_path))
+            save_parquet(df=self.train, path=data_path, file_name='training_data.parquet')
+            if self.test_result is not None:
+                save_parquet(df=self.test_result, path=data_path, file_name='test_data_with_result.parquet')
+            else:
+                save_parquet(df=self.test, path=data_path, file_name='test_data.parquet')
+        logger.info('model is saved in the location : {}'.format(path))
 
     def load(self, path: str = None):
         """"""
         if not self.task == 'regression':
             from pycaret.classification import load_model
-            file_path = os.path.join(path, 'classification')
-            self.model_pipeline = load_model(model_name=file_path, verbose=False)
-            logger.info('Trained pycaret model is loaded from: {}'.format(path))
         else:
             from pycaret.regression import load_model
-            file_path = os.path.join(path, 'regression')
-            self.model_pipeline = load_model(model_name=file_path, verbose=False)
-            logger.info('Trained pycaret model is loaded from: {}'.format(path))
+        file_path = os.path.join(path, str(self.task))
+        self.model_pipeline = load_model(model_name=file_path, verbose=False)
+        logger.info('Trained pycaret model is loaded from: {}'.format(path))
 
-    def predict(self, data: pd.DataFrame = None) -> pd.DataFrame:
+    def predict(self, data: pd.DataFrame = None, proba: bool = False) -> pd.DataFrame:
         """"""
         assert isinstance(data, (pd.DataFrame, np.ndarray))
         if not self.task == 'regression':
@@ -413,12 +422,17 @@ class PyCaretModel(TabularModels):
             predict_result = predict_model(estimator=self.model_pipeline, data=data, raw_score=True, round=2,
                                            verbose=self.verbose)
             logger.info('prediction done for pycaret classification model')
+            if not proba:
+                return predict_result['prediction_score_1']
+            else:
+                return predict_result['prediction_score_1']
+
         else:
             from pycaret.regression import predict_model
             # TODO-Regression: Implement for regression
-            predict_result = predict_model(estimator=self.model_pipeline, data=data, round=2, verbose=self.verbose)
-            logger.info('prediction done for pycaret regression model')
-        return predict_result['prediction_score_1']
+            # predict_result = predict_model(estimator=self.model_pipeline, data=data, round=2, verbose=self.verbose)
+            # logger.info('prediction done for pycaret regression model')
+            # return predict_result['prediction_score_1']
 
     def create_custom_model(self, estimator: str = None, cv_fold_size: int = 4, probability_threshold: float = 0.5,
                             cross_validation: bool = True, verbose: bool = False):

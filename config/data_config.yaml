@@ -1,8 +1,8 @@
 paths:
-  train:
-  test: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_test.csv'
-  output: '${hydra:runtime.cwd}/results'
-  result: '${hydra:runtime.cwd}/results/test'
+  train: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_2.csv'
+  test:
+  output: '${hydra:runtime.cwd}/model'
+  result:
 
 columns:
   categorical_columns: ['workclass', 'fnlwgt', 'education', 'marital.status', 'occupation', 'relationship',
@@ -16,12 +16,13 @@ columns:
   drift_columns: ['education', 'marital.status', 'occupation', 'race', 'hours.per.week']
 
 process:
-  exp_id: 'test'
+  exp_id: 'validate_1'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
   seed: 33
   task: 'classification'
+  multi_label: False
   verbose: False
   surrogate_model: True
   only_surrogate: False
@@ -36,6 +37,7 @@ data_validation:
   data_drift: True
   data_integrity: True
   prediction_drift: True
+  prior_model_result: '${hydra:runtime.cwd}/model/validate/dataset/test_data_with_result.parquet'
   save_html: True
 
 defaults:
@@ -50,16 +52,16 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['catboost', 'xgboost', 'lightgbm']
+  algorithm: ['rf']
   ensemble: False
   ensemble_type: 'stack'
   cv_fold: 4
   iteration: 60
   prob_thresh: 0.5
-  tuning: True
+  tuning: False
   pca: False
   calibrate: True
-  feature_importance: True
+  feature_importance: False
   fairness: True
 
 hyperparams:

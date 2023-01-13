@@ -25,7 +25,6 @@ and edit line `56` rename `jinja2.contextfunction` to `jinja2.pass_context`
 
 ## TODO's
 1. Implement regression task in the module (Search: `TODO-Regression` in the module)
-2. Act on both independent drift and target drift in both training and prediction mode
-3. Act on Fairness reports (Decide thresholds). Post process results so that model is aligned with FEAT principles
-4. Develop Custom feature explanation module for interpretability
-5. Write Docstrings and Unitest for Module maintainability
+2. Act on Fairness reports (Decide thresholds). Post process results so that model is aligned with FEAT principles
+3. Develop Custom feature explanation module for interpretability. Default from PyCaret is taking time.
+4. Write Docstrings and Unitest for Module maintainability
