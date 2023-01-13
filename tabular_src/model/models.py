@@ -4,10 +4,7 @@ import os
 from omegaconf import OmegaConf
 from tqdm import tqdm
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 
-from ..data import DataLoader, PerformanceDrift
 from .evaluation import EvaluateClassification
 from ..fairness import FairnessClassification
 from ..utils import pick_custom_grid, monotonic_feature_list, save_parquet, get_logger

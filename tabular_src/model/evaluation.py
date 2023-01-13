@@ -5,7 +5,7 @@ import os
 from copy import deepcopy
 from sklearn.metrics import (f1_score, accuracy_score, confusion_matrix, precision_score, recall_score,
                              multilabel_confusion_matrix, log_loss, roc_auc_score, classification_report)
-from ..data import DataLoader, PerformanceDrift
+from ..data import PerformanceDrift
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -146,7 +146,7 @@ class EvaluateClassification(object):
                                             categorical_columns=None, numerical_columns=None, datetime_columns=None,
                                             target_label=target_label, prediction_label=prediction_label,
                                             task='classification', seed=self.seed)
-            result_drift.run_drift_checks(top_k=10, multi_label=self.multi_label, save_html=True,
+            result_drift.run_drift_checks(multi_label=self.multi_label, save_html=True,
                                           save_dir=os.path.join(report_path, 'reports'),
                                           filename='performance_datadrift', return_dict=False)
         except Exception as error:

@@ -197,14 +197,12 @@ class PerformanceDrift(object):
                                              datetime_columns=self.datetime_columns, task=self.task,
                                              num_columns=self.num_columns, cat_colummns=self.cat_columns)
 
-    def run_drift_checks(self, top_k: int = 5, multi_label: bool = False,
-                         save_html: bool = False, save_dir: str = None, return_dict: bool = False,
-                         filename: str = 'performance_drift') -> Union[NoReturn, Dict]:
+    def run_drift_checks(self,  multi_label: bool = False, save_html: bool = False, save_dir: str = None,
+                         return_dict: bool = False, filename: str = 'performance_drift') -> Union[NoReturn, Dict]:
         """"""
         # dataset-level tests
         t0 = time.time()
         if not self.task == 'regression':
-            import pdb; pdb.set_trace()
             if not multi_label:
                 logger.info('Running Binary classification result drift reports between current and past prediction')
                 datadrift_tests = TestSuite(tests=[
@@ -226,7 +224,6 @@ class PerformanceDrift(object):
         else:
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
-            import pdb; pdb.set_trace()
             file_path = os.path.join(save_dir, '{}_report.html'.format(filename))
             datadrift_tests.save_html(file_path)
             file_path = os.path.join(save_dir, '{}_report.json'.format(filename))
