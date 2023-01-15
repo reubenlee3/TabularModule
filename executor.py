@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import time
 import hydra
+from datetime import datetime
 from tabular_src import DataIntegrityTest, DataLoader, TrainingDataDrift
 from tabular_src import PyCaretModel, SurrogateModel
 from tabular_src import get_logger
@@ -92,7 +93,7 @@ def execute_main(cfg) -> None:
             # Train Model
             pycaret_model = PyCaretModel(train=train_df, target=target_label, task=cfg.process.task, test=test_df,
                                          estimator_list=cfg.model.algorithm, params=None, n_jobs=-1, use_gpu=False,
-                                         is_multilabel=False, categorical_cols=categorical_cols,
+                                         is_multilabel=cfg.process.multi_label, categorical_cols=categorical_cols,
                                          numerical_cols=numerical_cols, keep_features=None, text_cols=None,
                                          monotone_inc_cols=cfg.columns.monotonic_increase_columns,
                                          monotone_dec_cols=cfg.columns.monotonic_decrease_columns,
@@ -111,7 +112,8 @@ def execute_main(cfg) -> None:
                               early_stopping_max_iters=4, ensemble_model=cfg.model.ensemble,
                               ensemble_type=cfg.model.ensemble_type)
 
-            pycaret_model.model_evaluation(path=output_folder, plot=True)
+            pycaret_model.model_evaluation(path=output_folder, plot=True,
+                                           prior_model_result=cfg.data_validation.prior_model_result)
 
             if cfg.model.feature_importance:
                 # TODO 3: Write Custom SHAP, ICE or Feature Permutation plots
@@ -120,7 +122,7 @@ def execute_main(cfg) -> None:
             if cfg.model.fairness:
                 pycaret_model.check_fairness(sensitive_features=cfg.columns.sensitive_columns, path=output_folder)
 
-            pycaret_model.save(path=output_folder, training_data=True)
+            pycaret_model.save(path=output_folder, save_with_data=True)
         else:
             logger.info('only surrogate model training is selected')
         t1 = time.time()
@@ -135,7 +137,7 @@ def execute_main(cfg) -> None:
 
         test_df = data_loader.return_values()
         if cfg.data_validation.prediction_drift:
-            logger.info('Running prediction drift')
+            logger.info('Running prediction-training drift')
             try:
                 file_path = os.path.join(cfg.paths.result, 'training_data.parquet')
                 trained_data = pd.read_parquet(path=file_path, engine='auto')
@@ -150,9 +152,6 @@ def execute_main(cfg) -> None:
                                                                 save_dir=os.path.join(output_folder, 'reports'),
                                                                 filename='prediction_datadrift',
                                                                 return_dict=True)
-                # data_drift_report.run_drift_checks(save_html=cfg.data_validation.save_html,
-                #                                    save_dir=os.path.join(output_folder, 'reports'),
-                #                                    )
                 datadrift_status = data_drift.act_drift_results(test_results=data_drift_report, drift_thresh=0.5)
                 # TODO 2: Stop if there is too much drift between train and prediction
 
@@ -161,7 +160,8 @@ def execute_main(cfg) -> None:
 
         # load model
         pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,
-                                     is_multilabel=False, seed=cfg.process.seed, verbose=cfg.process.verbose)
+                                     is_multilabel=cfg.process.multi_label, seed=cfg.process.seed,
+                                     verbose=cfg.process.verbose)
 
         pycaret_model.load(path=cfg.paths.result)
         # score model
@@ -172,7 +172,8 @@ def execute_main(cfg) -> None:
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
             logger.info('Storing prediction at {}'.format(output_folder))
-        file_path = os.path.join(output_folder, 'prediction.csv')
+        prediction_file = 'prediction{}.csv'.format(datetime.now().strftime('%d%b%Y_%H::%M'))
+        file_path = os.path.join(output_folder, prediction_file)
         test_df.to_csv(file_path, index=False)
 
 

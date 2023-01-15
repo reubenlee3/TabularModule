@@ -7,6 +7,11 @@ from evidently.report import Report
 from evidently.metrics import DataDriftTable
 from evidently.metric_preset import DataQualityPreset
 from evidently.metric_preset import TargetDriftPreset
+from evidently.test_suite import TestSuite
+from evidently.test_preset import RegressionTestPreset
+from evidently.test_preset import MulticlassClassificationTestPreset
+from evidently.test_preset import BinaryClassificationTopKTestPreset
+from evidently.test_preset import BinaryClassificationTestPreset
 
 from .data_driftaction import DriftActions
 from ..utils import get_logger
@@ -133,9 +138,6 @@ class TrainingDataDrift(object):
         """"""
         # dataset-level tests
         t0 = time.time()
-        # datadrift_tests = TestSuite(tests=[
-        #     TestValueDrift(),
-        # ])
         target_drift_tests = Report(metrics=[TargetDriftPreset(),
                                              ])
         target_drift_tests.run(current_data=self.test_df, reference_data=self.train_df, column_mapping=self.col_mapping)
@@ -145,6 +147,7 @@ class TrainingDataDrift(object):
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.html')
+            # TODO: Save file in html
             # target_drift_tests.save_html(file_path)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.json')
             target_drift_tests.save_json(file_path)
@@ -171,6 +174,65 @@ class TrainingDataDrift(object):
         drift_actions = DriftActions(test_results=test_results, important_drift_columns=important_drift_columns)
         continue_process = drift_actions.run_conceptdrift_action(drift_thresh=drift_thresh)
         return continue_process
+
+
+class PerformanceDrift(object):
+    def __init__(self, prediction_latest: pd.DataFrame = None, prediction_earlier: pd.DataFrame = None,
+                 categorical_columns: list = None, numerical_columns: list = None,
+                 datetime_columns: list = None, target_label: str = None, prediction_label: str = None,
+                 task: str = None, seed: int = None):
+        assert isinstance(prediction_latest, pd.DataFrame), 'Latest prediction is not in Pandas DataFrame'
+        assert isinstance(prediction_earlier, pd.DataFrame), 'Earlier prediction data is not in Pandas DataFrame'
+        self.pred_latest = prediction_latest
+        self.pred_earlier = prediction_earlier
+        self.cat_columns = categorical_columns
+        self.num_columns = numerical_columns
+        self.datetime_columns = datetime_columns
+        self.target = target_label
+        self.seed = seed
+        self.task = task
+        self.col_mapping = create_colmapping(target=self.target, prediction=prediction_label,
+                                             datetime_columns=self.datetime_columns, task=self.task,
+                                             num_columns=self.num_columns, cat_colummns=self.cat_columns)
+
+    def run_drift_checks(self,  multi_label: bool = False, save_html: bool = False, save_dir: str = None,
+                         return_dict: bool = False, filename: str = 'performance_drift') -> Union[NoReturn, Dict]:
+        """"""
+        # dataset-level tests
+        t0 = time.time()
+        if not self.task == 'regression':
+            if not multi_label:
+                logger.info('Running Binary classification result drift reports between current and past prediction')
+                datadrift_tests = TestSuite(tests=[
+                    BinaryClassificationTestPreset(prediction_type='labels', stattest='psi'),
+                ])
+            else:
+                logger.info('Running Multi classification result drift reports between current and past prediction')
+                datadrift_tests = TestSuite(tests=[
+                    MulticlassClassificationTestPreset(stattest='psi'),
+                ])
+        else:
+            logger.info('Running Regression result drift reports between current and past prediction')
+            datadrift_tests = TestSuite(tests=[
+                RegressionTestPreset(),
+            ])
+        datadrift_tests.run(current_data=self.pred_latest, reference_data=self.pred_earlier, column_mapping=self.col_mapping)
+        if not save_html:
+            logger.info('Not result drift in html/json format')
+        else:
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            file_path = os.path.join(save_dir, '{}_report.html'.format(filename))
+            datadrift_tests.save_html(file_path)
+            file_path = os.path.join(save_dir, '{}_report.json'.format(filename))
+            datadrift_tests.save_json(file_path)
+            logger.info('Saved performance drift file in {}'.format(file_path))
+        if return_dict:
+            logger.info('Returning performance drift as dictionary to process dataframe')
+            test_results = datadrift_tests.as_dict()
+            return test_results['metrics'][0]
+        t1 = time.time()
+        logger.info('time taken to generate data-drift is {:.2f} secs'.format(t1 - t0))
 
 
 def create_colmapping(target: str = None, prediction: str = None, datetime_columns: list = None,
