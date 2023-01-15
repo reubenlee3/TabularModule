@@ -138,9 +138,6 @@ class TrainingDataDrift(object):
         """"""
         # dataset-level tests
         t0 = time.time()
-        # datadrift_tests = TestSuite(tests=[
-        #     TestValueDrift(),
-        # ])
         target_drift_tests = Report(metrics=[TargetDriftPreset(),
                                              ])
         target_drift_tests.run(current_data=self.test_df, reference_data=self.train_df, column_mapping=self.col_mapping)
@@ -150,6 +147,7 @@ class TrainingDataDrift(object):
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.html')
+            # TODO: Save file in html
             # target_drift_tests.save_html(file_path)
             file_path = os.path.join(save_dir, 'training_targetdrift_report.json')
             target_drift_tests.save_json(file_path)
