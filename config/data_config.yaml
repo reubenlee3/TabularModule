@@ -16,7 +16,7 @@ columns:
   drift_columns: ['education', 'marital.status', 'occupation', 'race', 'hours.per.week']
 
 process:
-  exp_id: 'validate_1'
+  exp_id: 'validate_2'
   memory_reduce: True
   infer_datatype: True
   test_ratio: 0.2
@@ -52,13 +52,13 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['rf']
+  algorithm: ['catboost', 'lightgbm', 'xgboost']
   ensemble: False
   ensemble_type: 'stack'
   cv_fold: 4
   iteration: 60
   prob_thresh: 0.5
-  tuning: False
+  tuning: True
   pca: False
   calibrate: True
   feature_importance: False

@@ -6,6 +6,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from .evaluation import EvaluateClassification
+from ..feature import ModelExplainer
 from ..fairness import FairnessClassification
 from ..utils import pick_custom_grid, monotonic_feature_list, save_parquet, get_logger
 
