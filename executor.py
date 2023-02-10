@@ -109,7 +109,7 @@ def execute_main(cfg) -> None:
                               cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
                               probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
                               custom_grid=custom_params_grid, n_iter=cfg.model.iteration, search_library='optuna',
-                              search_algorithm='tpe', search_metric='MAE', early_stopping=True,
+                              search_algorithm='tpe', search_metric=cfg.model.search_metric, early_stopping=True,
                               early_stopping_max_iters=4, ensemble_model=cfg.model.ensemble,
                               ensemble_type=cfg.model.ensemble_type)
 

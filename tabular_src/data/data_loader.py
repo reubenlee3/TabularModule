@@ -55,7 +55,6 @@ class DataLoader(object):
         self.seed = seed
         if isinstance(n_features, float):
             n_features = int(n_features * (self.train_df.shape[1] - 1))
-            print(n_features)
         if is_reduce_memory:
             logger.info('Reducing DataFrame memory')
             self.reduce_mem_usages()

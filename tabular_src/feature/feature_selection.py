@@ -48,7 +48,7 @@ class FeatureSelection(object):
                                text_features=None, max_encoding_ohe=20, encoding_method=None,
                                multicollinearity_threshold=self.multi_colinear_ratio)
             set_config('seed', self.seed)
-            feature_columns = list(get_config('X_train').columns)
+            feature_columns = list(get_config('X_train_transformed').columns)
             logger.info('Total columns after running feature selection is {}'.format(len(feature_columns)))
         else:
             logger.info('Selecting classification task to do auto-rfe')
@@ -61,7 +61,7 @@ class FeatureSelection(object):
                                text_features=None, max_encoding_ohe=20, encoding_method=None,
                                multicollinearity_threshold=self.multi_colinear_ratio)
             set_config('seed', self.seed)
-            feature_columns = list(get_config('X_train').columns)
+            feature_columns = list(get_config('X_train_transformed').columns)
             logger.info('Total columns after running feature selection is {}'.format(len(feature_columns)))
         feature_columns.append(self.target)
         if self.text_features is not None:
