@@ -56,6 +56,7 @@ model:
   ensemble_type: 'stack'
   cv_fold: 4
   fold_strategy: 'kfold' # or stratifiedkfold for classification
+  search_metric: 'MSE'
   iteration: 60
   prob_thresh: 0.5
   tuning: False
