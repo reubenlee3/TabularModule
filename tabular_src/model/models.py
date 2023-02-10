@@ -218,7 +218,7 @@ class PyCaretModel(TabularModels):
             self.model_pipeline = finalize_model(self.calibrated_model, model_only=False)
         else:
             from pycaret.regression import setup, set_config, create_model, tune_model, models, \
-                blend_models, stack_models, finalize_model, compare_models
+                blend_models, stack_models, finalize_model, compare_models, pull
             regressor = setup(data=self.train, target=self.target_col, test_data=self.test, feature_selection=False,
                               remove_multicollinearity=True, multicollinearity_threshold=0.6,
                               pca=apply_pca, remove_outliers=remove_outliers, fold_strategy=fold_strategy,
@@ -230,13 +230,15 @@ class PyCaretModel(TabularModels):
             # create regression model
             if len(self.estimator) == 1:
                 logger.info('Only one {} estimator is passed for modelling'.format(self.estimator[0]))
-                self.model = create_model(estimator=self.estimator[0], fold=cv_fold_size, round=2,
-                                          cross_validation=True, verbose=self.verbose)
+                self.model = self.create_custom_model(estimator=self.estimator[0], cv_fold_size=cv_fold_size,
+                                                      cross_validation=True, verbose=self.verbose,
+                                                      probability_threshold=None)
+                self.model_str = self.estimator[0]
                 if not optimize:
                     self.tuned_model = self.model
                 else:
                     self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
-                                                                   n_iter=n_iter, custom_grid=custom_grid,
+                                                                   n_iter=n_iter, custom_grid_path=custom_grid,
                                                                    search_metric=search_metric,
                                                                    search_library=search_library,
                                                                    search_algorithm=search_algorithm,
@@ -250,15 +252,17 @@ class PyCaretModel(TabularModels):
                 self.estimator = list(set(available_models).intersection(self.estimator))
                 if not ensemble_model:
                     logger.info('Ensemble model is not selected , so selecting the best model')
-                    self.model = compare_models(include=self.estimator, fold=cv_fold_size, round=2,
-                                                cross_validation=True, sort=search_metric, n_select=1,
-                                                errors='ignore',verbose=self.verbose
-                                                )
+                    compare_models(include=self.estimator, fold=cv_fold_size, round=2, cross_validation=True,
+                                   sort=search_metric, n_select=1, errors='ignore', verbose=self.verbose)
+                    self.model_str = pull().index[0]
+                    self.model = self.create_custom_model(estimator=self.model_str, cv_fold_size=cv_fold_size,
+                                                          cross_validation=True, verbose=self.verbose,
+                                                          probability_threshold=None)
                     if not optimize:
                         self.tuned_model = self.model
                     else:
                         self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
-                                                                       n_iter=n_iter, custom_grid=custom_grid,
+                                                                       n_iter=n_iter, custom_grid_path=custom_grid,
                                                                        search_metric=search_metric,
                                                                        search_library=search_library,
                                                                        search_algorithm=search_algorithm,
@@ -273,15 +277,14 @@ class PyCaretModel(TabularModels):
                     try:
                         model_list = []
                         for estimator in self.estimator:
-                            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
-                                                 cross_validation=True, probability_threshold=probability_threshold,
-                                                 verbose=self.verbose
-                                                 )
+                            model = self.create_custom_model(estimator=estimator, cv_fold_size=cv_fold_size,
+                                                             cross_validation=True, verbose=self.verbose,
+                                                             probability_threshold=None)
                             if not optimize:
                                 tuned_model = model
                             else:
                                 tuned_model, tuner = self._optimize_model(model=model, cv_fold_size=cv_fold_size,
-                                                                          n_iter=n_iter, custom_grid=custom_grid,
+                                                                          n_iter=n_iter, custom_grid_path=custom_grid,
                                                                           search_metric=search_metric,
                                                                           search_library=search_library,
                                                                           search_algorithm=search_algorithm,
@@ -294,20 +297,18 @@ class PyCaretModel(TabularModels):
                             logger.info('Model stacking is selected')
                             self.tuned_model = stack_models(estimator_list=model_list, meta_model=None,
                                                             fold=cv_fold_size, round=2, optimize=search_metric,
-                                                            method='auto', restack=False, verbose=self.verbose,
-                                                            probability_threshold=probability_threshold,
+                                                            restack=False, verbose=self.verbose,
                                                             choose_better=False)
                         elif ensemble_type == 'blend':
                             logger.info('Blending ML model')
                             self.tuned_model = blend_models(estimator_list=model_list, fold=cv_fold_size,
-                                                            round=2, optimize=search_metric, method='auto',
-                                                            verbose=self.verbose,
-                                                            probability_threshold=probability_threshold,
-                                                            choose_better=False)
+                                                            round=2, optimize=search_metric,
+                                                            verbose=self.verbose, choose_better=False)
                     except AssertionError as error:
                         logger.info('The issue in stacking the model is {}'.format(error))
+            # finalise model and train on holdout set
+            self.model_pipeline = finalize_model(self.tuned_model, model_only=False)
         logger.info('Training completed for PyCaret model')
-        # TODO-Regression: Implement for regression
 
     def _optimize_model(self, model, estimator_str: str = None, cv_fold_size: int = 4, n_iter: int = 20,
                         custom_grid_path: dict = None, search_metric: str = None, early_stopping: bool = False,
@@ -333,11 +334,6 @@ class PyCaretModel(TabularModels):
             from pycaret.regression import tune_model
             logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
                                                                                              search_metric))
-            # from pycaret.distributions import UniformDistribution, IntUniformDistribution
-            # custom_grid = {
-            #     "max_depth": IntUniformDistribution(4, 6, 1),
-            #     "learning_rate": UniformDistribution(0.05, 0.2, 1),
-            # }
             model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
                                       custom_grid=custom_grid_path, optimize=search_metric,
                                       search_library=search_library, search_algorithm=search_algorithm,
@@ -515,15 +511,26 @@ class PyCaretModel(TabularModels):
     def create_custom_model(self, estimator: str = None, cv_fold_size: int = 4, probability_threshold: float = 0.5,
                             cross_validation: bool = True, verbose: bool = False):
         """"""
-        from pycaret.classification import create_model
-        if estimator not in ['catboost', 'xgboost']:
-            logger.info('Model is {}, So cannot apply monotonic function'.format(estimator))
-            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
-                                 cross_validation=cross_validation, probability_threshold=probability_threshold,
-                                 verbose=verbose)
+        if not self.task == 'regression':
+            from pycaret.classification import create_model
+            if estimator not in ['catboost', 'xgboost']:
+                logger.info('Model is {}, So cannot apply monotonic function'.format(estimator))
+                model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                     cross_validation=cross_validation, probability_threshold=probability_threshold,
+                                     verbose=verbose)
+            else:
+                logger.info('Model is {}, So apply monotonic function'.format(estimator))
+                model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                     cross_validation=cross_validation, probability_threshold=probability_threshold,
+                                     monotone_constraints=self.monotone_constraints, verbose=verbose)
         else:
-            logger.info('Model is {}, So apply monotonic function'.format(estimator))
-            model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
-                                 cross_validation=cross_validation, probability_threshold=probability_threshold,
-                                 monotone_constraints=self.monotone_constraints, verbose=verbose)
+            from pycaret.regression import create_model
+            if estimator not in ['catboost', 'xgboost']:
+                logger.info('Model is {}, So cannot apply monotonic function'.format(estimator))
+                model = create_model(estimator=estimator, fold=cv_fold_size, round=2,
+                                     cross_validation=cross_validation,  verbose=verbose)
+            else:
+                logger.info('Model is {}, So apply monotonic function'.format(estimator))
+                model = create_model(estimator=estimator, fold=cv_fold_size, round=2, cross_validation=cross_validation,
+                                     monotone_constraints=self.monotone_constraints, verbose=verbose)
         return model
