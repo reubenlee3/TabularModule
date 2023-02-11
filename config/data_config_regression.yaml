@@ -1,0 +1,70 @@
+paths:
+  train: '${hydra:runtime.cwd}/tabular_src/test/testdata/housing.csv'
+  test:
+  output: '${hydra:runtime.cwd}/model'
+  result: "${hydra:runtime.cwd}/results"
+
+columns:
+  categorical_columns: ['Utilities', 'LotArea', 'Street']
+  text_columns:
+  keep_columns: ['Utilities', 'LotArea', 'Street', 'YearBuilt']
+  sensitive_columns:
+  target_label: 'SalePrice'
+  monotonic_increase_columns:
+  monotonic_decrease_columns:
+  drift_columns: ['Utilities', 'LotArea', 'Street']
+
+process:
+  exp_id: 'regression_model_1'
+  memory_reduce: True
+  infer_datatype: True
+  test_ratio: 0.2
+  seed: 33
+  task: 'regression'
+  multi_label: False
+  verbose: False
+  surrogate_model: True
+  only_surrogate: False
+
+feature_selection:
+  auto: True
+  estimator: 'lightgbm'
+  n_features: 1
+  multi_colinear_threshold: 0.6
+
+data_validation:
+  data_drift: True
+  data_integrity: True
+  prediction_drift: True
+  prior_model_result: '${hydra:runtime.cwd}/model/validate/dataset/test_data_with_result.parquet'
+  save_html: True
+
+defaults:
+  - _self_
+  - hydra/hydra_logging: none
+  - hydra/job_logging: none
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+model:
+  surrogate_algorithm: 'random_forest'
+  algorithm: ['rf', 'lightgbm']
+  ensemble: False
+  ensemble_type: 'stack'
+  cv_fold: 4
+  fold_strategy: 'kfold' # or stratifiedkfold for classification
+  search_metric: 'MSE'
+  iteration: 60
+  prob_thresh: 0.5
+  tuning: False
+  pca: False
+  calibrate: True
+  feature_importance: False
+  fairness: True
+
+hyperparams:
+  classification_params: '${hydra:runtime.cwd}/config/hyper_params_classification.yaml'
+  regression_params: '${hydra:runtime.cwd}/config/hyper_params_regression.yaml'

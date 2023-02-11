@@ -2,7 +2,7 @@ from typing import Union
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, train_test_split
 
 from ..feature import FeatureSelection
 from ..utils import get_logger
@@ -19,6 +19,8 @@ class DataLoader(object):
                  multi_colinear_threshold: float = None, keep_features: Union[list, str] = None,
                  text_features: Union[list, str] = None, seed: int = None):
         """"""
+        self.task = task
+
         if isinstance(train, str):
             # Read dataframe from csv path
             self.mode = 'training'
@@ -132,10 +134,15 @@ class DataLoader(object):
         if self.test_df is not None:
             logger.info('Test dataframe is passed separately')
         else:
-            splitter = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=self.seed)
-            train_index, test_index = next(splitter.split(self.train_df, self.train_df[self.target]))
-            self.test_df = self.train_df.loc[self.train_df.index[test_index]]
-            self.train_df = self.train_df.loc[self.train_df.index[train_index]]
+            if self.task == 'classification':
+                splitter = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=self.seed)
+                train_index, test_index = next(splitter.split(self.train_df, self.train_df[self.target]))
+                self.test_df = self.train_df.loc[self.train_df.index[test_index]]
+                self.train_df = self.train_df.loc[self.train_df.index[train_index]]
+            else: 
+                X_train, X_test, y_train, y_test = train_test_split(self.train_df.drop(columns=[self.target]), self.train_df[self.target], test_size=test_ratio)
+                self.test_df = X_test.join(y_test)
+                self.train_df = X_train.join(y_train)
             logger.info('Creating test(hold-out) by splitting the train dataframe')
 
     def return_values(self):

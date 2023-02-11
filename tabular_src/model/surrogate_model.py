@@ -86,7 +86,7 @@ class SurrogateModel(object):
                     [
                         ("preprocess", preprocessing),
                         ("classifier", RandomForestRegressor(random_state=self.seed, n_estimators=125, n_jobs=-1,
-                                                             max_depth=4, criterion='entropy')),
+                                                             max_depth=4, criterion='friedman_mse')),
                     ]
                 )
                 self.model_pipeline.fit(X=self.train, y=self.target)
@@ -95,7 +95,7 @@ class SurrogateModel(object):
                 self.model_pipeline = Pipeline(
                     [
                         ("preprocess", preprocessing),
-                        ("classifier", DecisionTreeRegressor(random_state=self.seed, max_depth=4, criterion='gini')),
+                        ("classifier", DecisionTreeRegressor(random_state=self.seed, max_depth=4, criterion='friedman_mse')),
                     ]
                 )
                 self.model_pipeline.fit(X=self.train, y=self.target)

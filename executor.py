@@ -9,8 +9,9 @@ from tabular_src import get_logger
 
 logger = get_logger(__name__)
 
+config_name = 'data_config_regression'
 
-@hydra.main(config_path='config', config_name='data_config')
+@hydra.main(config_path='config', config_name=config_name)
 def execute_main(cfg) -> None:
     """"""
     # Set-up parameters
@@ -104,11 +105,11 @@ def execute_main(cfg) -> None:
             else:
                 custom_params_grid = cfg.hyperparams.regression_params
 
-            pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy='stratifiedkfold',
+            pycaret_model.fit(apply_pca=cfg.model.pca, remove_outliers=False, fold_strategy=cfg.model.fold_strategy,
                               cv_fold_size=cfg.model.cv_fold, calibrate=cfg.model.calibrate,
                               probability_threshold=cfg.model.prob_thresh, optimize=cfg.model.tuning,
                               custom_grid=custom_params_grid, n_iter=cfg.model.iteration, search_library='optuna',
-                              search_algorithm='tpe', search_metric='F1', early_stopping=True,
+                              search_algorithm='tpe', search_metric=cfg.model.search_metric, early_stopping=True,
                               early_stopping_max_iters=4, ensemble_model=cfg.model.ensemble,
                               ensemble_type=cfg.model.ensemble_type)
 

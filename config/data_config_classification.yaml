@@ -56,6 +56,8 @@ model:
   ensemble: False
   ensemble_type: 'stack'
   cv_fold: 4
+  fold_strategy: 'stratifiedkfold' # or kfold for regression
+  search_metric: 'F1'
   iteration: 60
   prob_thresh: 0.5
   tuning: False
