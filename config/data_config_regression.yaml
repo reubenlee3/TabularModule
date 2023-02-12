@@ -10,7 +10,7 @@ columns:
   keep_columns: ['Utilities', 'LotArea', 'Street', 'YearBuilt']
   sensitive_columns:
   target_label: 'SalePrice'
-  monotonic_increase_columns:
+  monotonic_increase_columns: ['LotArea']
   monotonic_decrease_columns:
   drift_columns: ['Utilities', 'LotArea', 'Street']
 
@@ -51,8 +51,8 @@ hydra:
 
 model:
   surrogate_algorithm: 'random_forest'
-  algorithm: ['rf', 'lightgbm']
-  ensemble: False
+  algorithm: ['catboost', 'xgboost']
+  ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4
   fold_strategy: 'kfold' # or stratifiedkfold for classification
