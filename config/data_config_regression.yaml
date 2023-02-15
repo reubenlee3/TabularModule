@@ -1,8 +1,8 @@
 paths:
-  train: '${hydra:runtime.cwd}/tabular_src/test/testdata/housing.csv'
-  test:
+  train: #'${hydra:runtime.cwd}/tabular_src/test/testdata/housing.csv'
+  test: '${hydra:runtime.cwd}/tabular_src/test/testdata/housing_test.csv'
   output: '${hydra:runtime.cwd}/model'
-  result: "${hydra:runtime.cwd}/results"
+  result:
 
 columns:
   categorical_columns: ['Utilities', 'LotArea', 'Street']
@@ -56,12 +56,12 @@ model:
   ensemble_type: 'stack'
   cv_fold: 4
   fold_strategy: 'kfold' # or stratifiedkfold for classification
-  search_metric: 'MSE'
+  search_metric: 'RMSE'
   iteration: 60
   prob_thresh: 0.5
-  tuning: False
+  tuning: True
   pca: False
-  calibrate: True
+  calibrate: False
   feature_importance: False
   fairness: True
 

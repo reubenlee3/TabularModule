@@ -5,7 +5,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 import pandas as pd
 
-from .evaluation import EvaluateClassification
+from .evaluation import EvaluateClassification, EvaluateRegression
 from ..feature import ModelExplainer
 from ..fairness import FairnessClassification
 from ..utils import pick_custom_grid, monotonic_feature_list, save_parquet, get_logger
@@ -237,7 +237,7 @@ class PyCaretModel(TabularModels):
                 if not optimize:
                     self.tuned_model = self.model
                 else:
-                    self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
+                    self.tuned_model, tuner = self._optimize_model(model=self.model, estimator_str=self.model_str, cv_fold_size=cv_fold_size,
                                                                    n_iter=n_iter, custom_grid_path=custom_grid,
                                                                    search_metric=search_metric,
                                                                    search_library=search_library,
@@ -255,13 +255,15 @@ class PyCaretModel(TabularModels):
                     compare_models(include=self.estimator, fold=cv_fold_size, round=2, cross_validation=True,
                                    sort=search_metric, n_select=1, errors='ignore', verbose=self.verbose)
                     self.model_str = pull().index[0]
+                    logger.info('The best model based on {mtr} is {model}'.format(mtr=search_metric,
+                                                                                  model=self.model_str))
                     self.model = self.create_custom_model(estimator=self.model_str, cv_fold_size=cv_fold_size,
                                                           cross_validation=True, verbose=self.verbose,
                                                           probability_threshold=None)
                     if not optimize:
                         self.tuned_model = self.model
                     else:
-                        self.tuned_model, tuner = self._optimize_model(model=self.model, cv_fold_size=cv_fold_size,
+                        self.tuned_model, tuner = self._optimize_model(model=self.model, estimator_str=self.model_str, cv_fold_size=cv_fold_size,
                                                                        n_iter=n_iter, custom_grid_path=custom_grid,
                                                                        search_metric=search_metric,
                                                                        search_library=search_library,
@@ -269,8 +271,6 @@ class PyCaretModel(TabularModels):
                                                                        early_stopping=early_stopping,
                                                                        early_stopping_max_iters=early_stopping_max_iters,
                                                                        )
-
-                    logger.info('The best model is {}'.format(type(self.model)))
                 else:
                     logger.info('Selected ensemble model and ensemble type is {}'.format(ensemble_type))
                     logger.info('Model ensemble is selected')
@@ -283,7 +283,7 @@ class PyCaretModel(TabularModels):
                             if not optimize:
                                 tuned_model = model
                             else:
-                                tuned_model, tuner = self._optimize_model(model=model, cv_fold_size=cv_fold_size,
+                                tuned_model, tuner = self._optimize_model(estimator_str=estimator, model=model, cv_fold_size=cv_fold_size,
                                                                           n_iter=n_iter, custom_grid_path=custom_grid,
                                                                           search_metric=search_metric,
                                                                           search_library=search_library,
@@ -306,6 +306,7 @@ class PyCaretModel(TabularModels):
                                                             verbose=self.verbose, choose_better=False)
                     except AssertionError as error:
                         logger.info('The issue in stacking the model is {}'.format(error))
+
             # finalise model and train on holdout set
             self.model_pipeline = finalize_model(self.tuned_model, model_only=False)
         logger.info('Training completed for PyCaret model')
@@ -318,7 +319,7 @@ class PyCaretModel(TabularModels):
         # tune model
         if not self.task == 'regression':
             from pycaret.classification import tune_model
-            logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
+            logger.info('Model optimization is selected using method: {} and metric {}:'.format(search_algorithm,
                                                                                              search_metric))
             custom_grid_dict = OmegaConf.load(custom_grid_path)
             custom_params = pick_custom_grid(estimator=estimator_str, custom_grid_dict=custom_grid_dict)
@@ -332,10 +333,12 @@ class PyCaretModel(TabularModels):
         else:
             # TODO-Regression: Modify for regression
             from pycaret.regression import tune_model
-            logger.info('Model optimization is selected using method: {} and metric:'.format(search_algorithm,
+            logger.info('Model optimization is selected using method: {} and metric {}:'.format(search_algorithm,
                                                                                              search_metric))
+            custom_grid_dict = OmegaConf.load(custom_grid_path)
+            custom_params = pick_custom_grid(estimator=estimator_str, custom_grid_dict=custom_grid_dict)
             model, tuner = tune_model(estimator=model, fold=cv_fold_size, n_iter=n_iter, round=2,
-                                      custom_grid=custom_grid_path, optimize=search_metric,
+                                      custom_grid=custom_params, optimize=search_metric,
                                       search_library=search_library, search_algorithm=search_algorithm,
                                       early_stopping=early_stopping, verbose=self.verbose,
                                       early_stopping_max_iters=early_stopping_max_iters,
@@ -376,17 +379,34 @@ class PyCaretModel(TabularModels):
             else:
                 logger.info('There is no evaluation with prior model results')
         else:
-            pass
+            
             # TODO-Regression: Implement for regression
-            # from pycaret.regression import predict_model
-            # predict_result = predict_model(estimator=self.calibrated_model,
-            #                                data=self.test.drop(columns=[self.target_label]),
-            #                                round=2, verbose=self.verbose)['prediction_label']
-            # evaluate = EvaluateClassification(estimator=self.calibrated_model, labels=self.test[self.target_label],
-            #                                   pred_proba=predict_result, prob_threshold=0.5,
-            #                                   multi_label=self.is_multilabel)
-            # file_path = os.path.join(path, 'classification')
-            # evaluate.save(filepath=file_path, plot=True)
+            from pycaret.regression import predict_model
+            predict_result = predict_model(estimator=self.tuned_model,
+                                           data=self.test.drop(columns=[self.target_label]),
+                                           round=2,
+                                           verbose=self.verbose).filter(regex="prediction_.*", axis=1)
+            self.test_result = pd.concat([self.test.reset_index(drop=True, inplace=False),
+                                          predict_result.reset_index(drop=True, inplace=False)], axis=1)
+            evaluate = EvaluateRegression(estimator=self.tuned_model, labels=self.test[self.target_label],
+                                              preds=predict_result['prediction_label'], seed=self.seed)
+            file_path = os.path.join(eval_results_path, 'evaluation_report.json')
+
+            plot_path = os.path.join(eval_results_path, 'plots')
+            if not os.path.exists(plot_path):
+                os.makedirs(plot_path)
+            evaluate.save(filepath=file_path, plot=plot, plot_path=plot_path)
+            # evaluate with earlier test performances
+            if prior_model_result is not None:
+                try:
+                    evaluate.drift(predict_df=self.test_result, prior_model_result=prior_model_result,
+                                   report_path=eval_results_path, target_label=self.target_label,
+                                   prediction_label='prediction_label')
+                except Exception as error:
+                    logger.error('Issue in evaluating with previous model results: {}'.format(error))
+            else:
+                logger.info('There is no evaluation with prior model results')
+            
 
     def feature_explanation(self, path: str = None):
         """"""
@@ -504,9 +524,12 @@ class PyCaretModel(TabularModels):
         else:
             from pycaret.regression import predict_model
             # TODO-Regression: Implement for regression
-            # predict_result = predict_model(estimator=self.model_pipeline, data=data, round=2, verbose=self.verbose)
-            # logger.info('prediction done for pycaret regression model')
-            # return predict_result['prediction_score_1']
+            from pycaret.regression import predict_model
+            predict_result = predict_model(estimator=self.model_pipeline, data=data, round=2,
+                                           verbose=self.verbose)
+            logger.info('prediction done for pycaret regression model')
+            return predict_result['prediction_label']
+
 
     def create_custom_model(self, estimator: str = None, cv_fold_size: int = 4, probability_threshold: float = 0.5,
                             cross_validation: bool = True, verbose: bool = False):

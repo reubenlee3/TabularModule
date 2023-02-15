@@ -1,0 +1,10 @@
+model:
+  lightgbm:
+    max_depth: IntUniformDistribution(4, 6, 1)
+    learning_rate: UniformDistribution(0.05, 0.2, 1)
+  xgboost:
+    eta: UniformDistribution(0.05, 0.2, 1)
+    booster: CategoricalDistribution(['gbtree'])
+  catboost:
+    depth: IntUniformDistribution(3, 5, 1)
+    learning_rate: UniformDistribution(0.05, 0.2, 1)
