@@ -163,7 +163,6 @@ def execute_main(cfg) -> None:
         pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,
                                      is_multilabel=cfg.process.multi_label, seed=cfg.process.seed,
                                      verbose=cfg.process.verbose)
-        logger.info(os.path.join(output_folder, f"{cfg.process.task}.pkl"))
         pycaret_model.load(path=output_folder)
         # score model
         pred_col = 'prob_score' if cfg.process.task == 'classification' else 'prediction_label'
