@@ -19,7 +19,7 @@ def execute_main(cfg) -> None:
     output_folder = os.path.join(cfg.paths.output, cfg.process.exp_id)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-        logger.info('Storing results at {}'.format(output_folder))
+    logger.info('Storing results at {}'.format(output_folder))
 
     if cfg.paths.train is not None:
         logger.info('Running Training mode')
@@ -163,18 +163,19 @@ def execute_main(cfg) -> None:
         pycaret_model = PyCaretModel(task=cfg.process.task, test=test_df, n_jobs=-1, use_gpu=False,
                                      is_multilabel=cfg.process.multi_label, seed=cfg.process.seed,
                                      verbose=cfg.process.verbose)
-
-        pycaret_model.load(path=cfg.paths.result)
+        logger.info(os.path.join(output_folder, f"{cfg.process.task}.pkl"))
+        pycaret_model.load(path=output_folder)
         # score model
-        test_df['prob_score'] = pycaret_model.predict(data=test_df)
+        pred_col = 'prob_score' if cfg.process.task == 'classification' else 'prediction_label'
+        test_df[pred_col] = pycaret_model.predict(data=test_df)
 
         # save result in the folder
-        output_folder = os.path.join(cfg.paths.result, 'scoring')
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
-            logger.info('Storing prediction at {}'.format(output_folder))
+        pred_folder = os.path.join(output_folder, 'scoring')
+        if not os.path.exists(pred_folder):
+            os.makedirs(pred_folder)
+            logger.info('Storing prediction at {}'.format(pred_folder))
         prediction_file = 'prediction{}.csv'.format(datetime.now().strftime('%d%b%Y_%H::%M'))
-        file_path = os.path.join(output_folder, prediction_file)
+        file_path = os.path.join(pred_folder, prediction_file)
         test_df.to_csv(file_path, index=False)
 
 

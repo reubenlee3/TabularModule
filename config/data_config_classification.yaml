@@ -1,6 +1,6 @@
 paths:
   train: '${hydra:runtime.cwd}/tabular_src/test/testdata/adult_2.csv'
-  test:
+  test: #'${hydra:runtime.cwd}/tabular_src/test/testdata/adult_test.csv'
   output: '${hydra:runtime.cwd}/model'
   result:
 
@@ -53,7 +53,7 @@ hydra:
 model:
   surrogate_algorithm: 'random_forest'
   algorithm: ['catboost', 'lightgbm', 'xgboost']
-  ensemble: False
+  ensemble: True
   ensemble_type: 'stack'
   cv_fold: 4
   fold_strategy: 'stratifiedkfold' # or kfold for regression
